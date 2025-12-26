@@ -13,7 +13,7 @@ export async function GET(
     try {
         const { date } = await params;
 
-        // Validate date format
+        // Validate date format (YYYY-MM-DD)
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
             return NextResponse.json(
                 {
@@ -24,13 +24,16 @@ export async function GET(
             );
         }
 
-        const matches = await getMatches({ date });
+        // Convert YYYY-MM-DD to YYYYMMDD for TheSports API
+        const apiDate = date.replace(/-/g, '');
+
+        const matches = await getMatches({ date: apiDate });
 
         return NextResponse.json({
             success: true,
             data: matches,
             date,
-            count: matches.length,
+            count: Array.isArray(matches) ? matches.length : 0,
             timestamp: new Date().toISOString(),
         });
     } catch (error) {
