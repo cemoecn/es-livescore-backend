@@ -52,14 +52,16 @@ export async function GET(
         if (detailLiveResponse.ok) {
             const detailLiveData = await detailLiveResponse.json();
 
-            if (!detailLiveData.err && detailLiveData.data) {
-                // data can be an array of matches or an object with results
-                const matches: DetailLiveMatch[] = Array.isArray(detailLiveData.data)
-                    ? detailLiveData.data
-                    : detailLiveData.data.results || [];
+            if (!detailLiveData.err) {
+                // The API can return results at the top level or inside data
+                const matches: DetailLiveMatch[] = Array.isArray(detailLiveData.results)
+                    ? detailLiveData.results
+                    : (Array.isArray(detailLiveData.data)
+                        ? detailLiveData.data
+                        : (detailLiveData.data?.results || []));
 
                 // Find our specific match
-                const match = matches.find(m => m.id === id);
+                const match = matches.find(m => String(m.id) === String(id));
 
                 if (match) {
                     source = 'detail_live';
