@@ -123,7 +123,7 @@ export async function loadTeamsCache(): Promise<void> {
     console.log('[Cache] Loading teams...');
 
     try {
-        const teams = await fetchAllPages<CachedTeam>('/v1/football/team/additional/list', 20);
+        const teams = await fetchAllPages<CachedTeam>('/v1/football/team/additional/list', 100);
 
         teamsCache.data.clear();
         teams.forEach(team => {
