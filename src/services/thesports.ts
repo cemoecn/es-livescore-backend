@@ -120,7 +120,7 @@ export async function getMatchLineup(matchId: string): Promise<Lineup> {
  * Get all competitions/leagues
  */
 export async function getCompetitions(): Promise<Competition[]> {
-    return apiFetch<Competition[]>('/v1/football/competition/list');
+    return apiFetch<Competition[]>('/v1/football/competition/additional/list');
 }
 
 /**
