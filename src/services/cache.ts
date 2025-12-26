@@ -123,15 +123,59 @@ export async function loadTeamsCache(): Promise<void> {
     console.log('[Cache] Loading teams...');
 
     try {
-        const teams = await fetchAllPages<CachedTeam>('/v1/football/team/additional/list', 100);
+        // Load teams with more pages to get all teams
+        const allTeams: CachedTeam[] = [];
+
+        for (let page = 1; page <= 100; page++) {
+            const url = `${API_URL}/v1/football/team/additional/list?user=${USERNAME}&secret=${API_KEY}&page=${page}`;
+
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' },
+                });
+
+                if (!response.ok) {
+                    console.log(`[Cache] Teams page ${page}: HTTP ${response.status}`);
+                    break;
+                }
+
+                const data = await response.json();
+
+                if (data.err) {
+                    console.log(`[Cache] Teams page ${page}: Error - ${data.err}`);
+                    break;
+                }
+
+                // Handle different response formats
+                const results = data.results || data.data?.results || [];
+
+                if (results.length === 0) {
+                    console.log(`[Cache] Teams page ${page}: No more results`);
+                    break;
+                }
+
+                allTeams.push(...results);
+
+                if (page === 1) {
+                    console.log(`[Cache] Teams page 1: Got ${results.length} teams, sample: ${results[0]?.name}`);
+                }
+
+                // If we got less than 1000, we're done
+                if (results.length < 1000) break;
+            } catch (e) {
+                console.log(`[Cache] Teams page ${page}: Fetch error - ${e}`);
+                break;
+            }
+        }
 
         teamsCache.data.clear();
-        teams.forEach(team => {
+        allTeams.forEach(team => {
             teamsCache.data.set(team.id, team);
         });
 
         teamsCache.lastUpdated = now;
-        console.log(`[Cache] Loaded ${teamsCache.data.size} teams`);
+        console.log(`[Cache] Loaded ${teamsCache.data.size} teams total`);
     } catch (error) {
         console.error('[Cache] Failed to load teams:', error);
     } finally {
