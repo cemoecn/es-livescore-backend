@@ -71,6 +71,16 @@ export async function GET() {
                 };
             }
 
+            // Special debug for detail_live
+            if (endpoint.path.includes('detail_live')) {
+                results[endpoint.path + '_DEBUG'] = {
+                    rawDataSample: data,
+                    dataIsArray: Array.isArray(data.data),
+                    resultsIsArray: Array.isArray(data.results),
+                    firstResult: data.results?.[0] || data.data?.[0] || data.data || null
+                };
+            }
+
             const hasData = !!(data.data || data.results);
             const error = data.err || null;
             const sampleData = data.data?.results?.[0] || data.results?.[0] || data.data || null;
