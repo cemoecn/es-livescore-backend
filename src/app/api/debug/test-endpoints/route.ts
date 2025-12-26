@@ -62,6 +62,15 @@ export async function GET() {
 
             const data = await response.json();
 
+            // Special debug for live/history
+            if (endpoint.path.includes('live/history')) {
+                results[endpoint.path + '_DEBUG'] = {
+                    rawDataSample: data,
+                    isArray: Array.isArray(data.data),
+                    dataLength: Array.isArray(data.data) ? data.data.length : 'N/A'
+                };
+            }
+
             const hasData = !!(data.data || data.results);
             const error = data.err || null;
             const sampleData = data.data?.results?.[0] || data.results?.[0] || data.data || null;
