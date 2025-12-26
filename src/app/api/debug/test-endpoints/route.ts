@@ -62,8 +62,8 @@ export async function GET() {
 
             const data = await response.json();
 
-            // Special debug for live/history
-            if (endpoint.path.includes('live/history')) {
+            // Special debug for team_stats/detail
+            if (endpoint.path.includes('team_stats/detail')) {
                 results[endpoint.path + '_DEBUG'] = {
                     rawDataSample: data,
                     isArray: Array.isArray(data.data),
