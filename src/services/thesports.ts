@@ -10,8 +10,7 @@ import type {
     Lineup,
     Match,
     MatchStats,
-    StandingsTable,
-    TheSportsResponse,
+    StandingsTable
 } from '@/types/thesports';
 
 const API_URL = process.env.THESPORTS_API_URL || 'https://api.thesports.com';
@@ -53,13 +52,19 @@ async function apiFetch<T>(
         throw new Error(`TheSports API Error: ${response.status} ${response.statusText}`);
     }
 
-    const data: TheSportsResponse<T> = await response.json();
+    const data = await response.json();
 
-    if (data.code !== 0) {
-        throw new Error(`TheSports API Error: ${data.message}`);
+    // Handle error response format: {"err": "message"}
+    if (data.err) {
+        throw new Error(`TheSports API Error: ${data.err}`);
     }
 
-    return data.data;
+    // Handle standard response format: {"code": 0, "message": "...", "data": ...}
+    if (data.code !== undefined && data.code !== 0) {
+        throw new Error(`TheSports API Error: ${data.message || 'Unknown error'}`);
+    }
+
+    return data.data ?? data;
 }
 
 // ============ Match Endpoints ============
