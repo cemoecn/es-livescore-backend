@@ -16,28 +16,32 @@ const SAMPLE_COMPETITION_ID = 'yl5ergphyvr8k0o';
 
 export async function GET() {
     const endpointsToTest = [
-        // Team endpoints
-        { path: '/v1/football/team/squad/list', params: { team: SAMPLE_TEAM_ID } },
-        { path: '/v1/football/team/list', params: {} },
-
-        // Match detail endpoints
+        // === ENDPOINTS FROM TheSportsAPI.pdf ===
+        // Real-time data - should contain incidents, stats, score
+        { path: '/v1/football/match/detail_live', params: {} },
+        // Historical match stats/incidents
+        { path: '/v1/football/match/live/history', params: { id: SAMPLE_MATCH_ID } },
+        // Lineup detail
+        { path: '/v1/football/match/lineup/detail', params: { id: SAMPLE_MATCH_ID } },
+        // Match trend
+        { path: '/v1/football/match/trend/live', params: {} },
+        { path: '/v1/football/match/trend/detail', params: { id: SAMPLE_MATCH_ID } },
+        // Team stats
+        { path: '/v1/football/match/team_stats/list', params: {} },
+        { path: '/v1/football/match/team_stats/detail', params: { id: SAMPLE_MATCH_ID } },
+        // Player stats
+        { path: '/v1/football/match/player_stats/list', params: {} },
+        { path: '/v1/football/match/player_stats/detail', params: { id: SAMPLE_MATCH_ID } },
+        // Match analysis (H2H)
         { path: '/v1/football/match/analysis', params: { id: SAMPLE_MATCH_ID } },
-        { path: '/v1/football/match/live', params: { id: SAMPLE_MATCH_ID } },
-        { path: '/v1/football/match/detail', params: { id: SAMPLE_MATCH_ID } },
-        { path: '/v1/football/match/detail/live', params: { id: SAMPLE_MATCH_ID } },
+        // Season standings
+        { path: '/v1/football/season/recent/table/detail', params: {} },
+        { path: '/v1/football/table/live', params: {} },
+
+        // === ORIGINAL TEST ENDPOINTS ===
+        { path: '/v1/football/team/squad/list', params: { team: SAMPLE_TEAM_ID } },
         { path: '/v1/football/match/incident/list', params: { id: SAMPLE_MATCH_ID } },
         { path: '/v1/football/match/lineup/list', params: { id: SAMPLE_MATCH_ID } },
-
-        // Standings and stats
-        { path: '/v1/football/standing', params: { competition_id: SAMPLE_COMPETITION_ID } },
-        { path: '/v1/football/standing/list', params: { competition_id: SAMPLE_COMPETITION_ID } },
-
-        // Player endpoints  
-        { path: '/v1/football/player/list', params: {} },
-        { path: '/v1/football/player/additional/list', params: {} },
-
-        // Odds endpoints
-        { path: '/v1/football/odds/list', params: { id: SAMPLE_MATCH_ID } },
     ];
 
     const results: Record<string, unknown> = {};
