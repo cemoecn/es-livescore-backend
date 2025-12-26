@@ -3,8 +3,8 @@
  * Returns match events (goals, cards, substitutions)
  * 
  * Uses endpoints from TheSportsAPI.pdf:
- * - /v1/football/match/live/history - for historical match incidents
- * - /v1/football/match/detail_live - for live match real-time data
+ * - /v1/football/match/detail_live - Real-time data with incidents for ALL live matches
+ * - /v1/football/match/live/history - Historical match data with incidents
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -25,44 +25,79 @@ interface ApiEvent {
     away_score?: number;
 }
 
+interface DetailLiveMatch {
+    id: string;
+    incidents?: ApiEvent[];
+    tlive?: ApiEvent[];
+    score?: unknown;
+    stats?: unknown;
+}
+
 export async function GET(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const { id } = await params;
-
-        // Try the historical match incidents endpoint first (from TheSportsAPI.pdf)
-        // This endpoint returns: score, match stats, match incidents, technical statistics
-        const historyUrl = `${API_URL}/v1/football/match/live/history?user=${USERNAME}&secret=${API_KEY}&id=${id}`;
-
         let events: ApiEvent[] = [];
-        let source = 'live/history';
+        let source = 'none';
 
-        const historyResponse = await fetch(historyUrl, {
+        // 1. Try detail_live first (real-time data for all live matches)
+        // This returns ALL live matches with their incidents - we need to find our match
+        const detailLiveUrl = `${API_URL}/v1/football/match/detail_live?user=${USERNAME}&secret=${API_KEY}`;
+        const detailLiveResponse = await fetch(detailLiveUrl, {
             headers: { 'Accept': 'application/json' },
         });
 
-        if (historyResponse.ok) {
-            const historyData = await historyResponse.json();
+        if (detailLiveResponse.ok) {
+            const detailLiveData = await detailLiveResponse.json();
 
-            if (!historyData.err && historyData.data) {
-                // Extract incidents from the response
-                // The API returns data with incidents array
-                const matchData = Array.isArray(historyData.data)
-                    ? historyData.data[0]
-                    : historyData.data;
+            if (!detailLiveData.err && detailLiveData.data) {
+                // data can be an array of matches or an object with results
+                const matches: DetailLiveMatch[] = Array.isArray(detailLiveData.data)
+                    ? detailLiveData.data
+                    : detailLiveData.data.results || [];
 
-                if (matchData?.incidents) {
-                    events = matchData.incidents;
-                } else if (matchData?.tlive) {
-                    // tlive contains timeline/live events
-                    events = matchData.tlive;
+                // Find our specific match
+                const match = matches.find(m => m.id === id);
+
+                if (match) {
+                    source = 'detail_live';
+                    if (match.incidents && Array.isArray(match.incidents)) {
+                        events = match.incidents;
+                    } else if (match.tlive && Array.isArray(match.tlive)) {
+                        events = match.tlive;
+                    }
                 }
             }
         }
 
-        // If no events found, try the team_stats endpoint as fallback
+        // 2. If no events from detail_live, try live/history (for historical data)
+        if (events.length === 0) {
+            const historyUrl = `${API_URL}/v1/football/match/live/history?user=${USERNAME}&secret=${API_KEY}&id=${id}`;
+            const historyResponse = await fetch(historyUrl, {
+                headers: { 'Accept': 'application/json' },
+            });
+
+            if (historyResponse.ok) {
+                const historyData = await historyResponse.json();
+
+                if (!historyData.err && historyData.data) {
+                    source = 'live/history';
+                    const matchData = Array.isArray(historyData.data)
+                        ? historyData.data.find((m: DetailLiveMatch) => m.id === id) || historyData.data[0]
+                        : historyData.data;
+
+                    if (matchData?.incidents && Array.isArray(matchData.incidents)) {
+                        events = matchData.incidents;
+                    } else if (matchData?.tlive && Array.isArray(matchData.tlive)) {
+                        events = matchData.tlive;
+                    }
+                }
+            }
+        }
+
+        // 3. Fallback: try team_stats/detail which might have event data
         if (events.length === 0) {
             const statsUrl = `${API_URL}/v1/football/match/team_stats/detail?user=${USERNAME}&secret=${API_KEY}&id=${id}`;
             const statsResponse = await fetch(statsUrl, {
@@ -72,12 +107,11 @@ export async function GET(
             if (statsResponse.ok) {
                 const statsData = await statsResponse.json();
                 if (!statsData.err && statsData.data) {
-                    source = 'team_stats/detail';
-                    // Extract any event data from stats response
                     const matchStats = Array.isArray(statsData.data)
                         ? statsData.data[0]
                         : statsData.data;
-                    if (matchStats?.incidents) {
+                    if (matchStats?.incidents && Array.isArray(matchStats.incidents)) {
+                        source = 'team_stats/detail';
                         events = matchStats.incidents;
                     }
                 }
@@ -89,6 +123,7 @@ export async function GET(
             data: events,
             matchId: id,
             source,
+            eventCount: events.length,
             timestamp: new Date().toISOString(),
         });
     } catch (error) {
@@ -98,13 +133,12 @@ export async function GET(
             {
                 success: false,
                 error: error instanceof Error ? error.message : 'Unknown error',
-                data: [], // Return empty array so frontend doesn't break
+                data: [],
             },
             { status: 500 }
         );
     }
 }
 
-// Revalidate every 10 seconds for live matches
-export const revalidate = 10;
-
+// Revalidate every 5 seconds for live matches
+export const revalidate = 5;
