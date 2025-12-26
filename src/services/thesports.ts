@@ -75,7 +75,7 @@ async function apiFetch<T>(
 export async function getMatches(params: GetMatchesParams = {}): Promise<Match[]> {
     // TheSports uses different endpoints for different statuses
     if (params.status === 'live') {
-        return apiFetch<Match[]>('/v1/football/match/recent');
+        return apiFetch<Match[]>('/v1/football/match/recent/list');
     }
 
     return apiFetch<Match[]>('/v1/football/match/diary', {
@@ -90,7 +90,7 @@ export async function getMatches(params: GetMatchesParams = {}): Promise<Match[]
  * Get live matches only
  */
 export async function getLiveMatches(): Promise<Match[]> {
-    return apiFetch<Match[]>('/v1/football/match/recent');
+    return apiFetch<Match[]>('/v1/football/match/recent/list');
 }
 
 /**
