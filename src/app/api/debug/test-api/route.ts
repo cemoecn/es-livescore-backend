@@ -8,12 +8,26 @@ const API_KEY = process.env.THESPORTS_API_KEY || '';
 const USERNAME = process.env.THESPORTS_USERNAME || '';
 
 export async function GET() {
-    // Test multiple endpoints to see which ones work
+    // Test multiple endpoints with correct paths from documentation
     const endpoints = [
+        // BASIC INFO - these should work
         '/v1/football/category/list',
         '/v1/football/country/list',
-        '/v1/football/competition/list',
-        '/v1/football/competition/additional/list',
+
+        // Competition endpoints
+        '/v1/football/competition/list',              // Standard (may fail)
+        '/v1/football/competition/additional/list',   // Additional (works!)
+
+        // Match endpoints - testing different path patterns
+        '/v1/football/match/recent',                  // Old (probably fails)
+        '/v1/football/match/recent/list',             // With /list suffix
+        '/v1/football/match/additional/recent',       // With /additional/ prefix
+        '/v1/football/match/additional/recent/list',  // Both
+
+        // Diary/Schedule endpoints
+        '/v1/football/match/diary',                   // Standard  
+        '/v1/football/match/diary/list',              // With /list suffix
+        '/v1/football/match/additional/diary',        // With /additional/ prefix
     ];
 
     const results: Record<string, { url: string; status?: number; response?: unknown; error?: string }> = {};
@@ -23,7 +37,6 @@ export async function GET() {
 
         try {
             console.log(`Testing endpoint: ${endpoint}`);
-            console.log(`Full URL: ${url.replace(API_KEY, '***')}`);
 
             const response = await fetch(url, {
                 method: 'GET',
@@ -41,7 +54,10 @@ export async function GET() {
                 status: response.status,
                 response: data.err ? { error: data.err } : {
                     success: true,
-                    dataCount: Array.isArray(data.data) ? data.data.length : 'N/A'
+                    code: data.code,
+                    dataCount: Array.isArray(data.data) ? data.data.length :
+                        (data.data?.results ? data.data.results.length : 'N/A'),
+                    hasData: !!data.data
                 },
             };
         } catch (error) {
