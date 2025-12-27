@@ -219,8 +219,8 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
             allMatches.push(...matchesOnDate);
         }
 
-        // If we got less than 1000, we're at the end of API data
-        if (pageMatches.length < 1000) break;
+        // Only stop if no matches returned at all (empty page)
+        if (pageMatches.length === 0) break;
     }
 
     console.log(`[Sync] Total matches found for ${date}: ${allMatches.length}`);
