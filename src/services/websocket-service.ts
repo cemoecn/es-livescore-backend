@@ -15,10 +15,10 @@ let client: MqttClient | null = null;
 let isConnecting = false;
 
 // Topics to subscribe to
+// According to TheSports docs, ALL real-time updates (score, status, incidents, stats)
+// come through the single match/v1 topic - there is no separate incident topic!
 const TOPICS = [
-    'thesports/football/match/v1', // Live match updates
-    'thesports/football/incident/v1', // Events (goals, cards, etc.)
-    'thesports/football/stats/v1', // Match statistics
+    'thesports/football/match/v1', // ALL live updates: score, status, incidents, stats
 ];
 
 interface MqttMatchUpdate {
@@ -262,26 +262,22 @@ export function connectMqtt(): Promise<void> {
             try {
                 const data = JSON.parse(message.toString());
 
-                if (topic.includes('match')) {
-                    // Handle match updates (score, status)
-                    // Format: [{ id: "matchId", score: [...] }] or array of match objects
-                    const updates = Array.isArray(data) ? data : [data];
-                    updates.forEach(handleMatchUpdate);
-                } else if (topic.includes('incident')) {
-                    // Handle incident updates
-                    // Format: [{ id: "matchId", incidents: [...] }]
-                    // The API sends the COMPLETE list of incidents for a match
-                    const updates = Array.isArray(data) ? data : [data];
-                    updates.forEach((update: { id?: string; match_id?: string; incidents?: MqttIncidentUpdate[] }) => {
-                        const matchId = update.id || update.match_id;
-                        if (matchId && update.incidents && Array.isArray(update.incidents)) {
-                            // Handle complete incident list
-                            handleIncidentsMessage(matchId, update.incidents);
-                        } else if (matchId && !update.incidents) {
-                            // Fallback: single incident (old format)
-                            handleIncidentsMessage(matchId, [update as unknown as MqttIncidentUpdate]);
-                        }
-                    });
+                // All updates come via thesports/football/match/v1 topic
+                // Each message contains: id, score, stats, incidents, tlive
+                const updates = Array.isArray(data) ? data : [data];
+
+                for (const update of updates) {
+                    const matchId = update.id;
+                    if (!matchId) continue;
+
+                    // Handle match score/status updates
+                    handleMatchUpdate(update);
+
+                    // Handle incidents if present in this update
+                    if (update.incidents && Array.isArray(update.incidents) && update.incidents.length > 0) {
+                        console.log(`[WS] Match ${matchId} has ${update.incidents.length} incidents`);
+                        handleIncidentsMessage(matchId, update.incidents);
+                    }
                 }
             } catch (error) {
                 console.error('[WS] Error parsing message:', error);
