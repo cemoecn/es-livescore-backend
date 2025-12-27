@@ -142,7 +142,38 @@ export async function syncLiveMatches(): Promise<{ synced: number; errors: numbe
             const statusId = scoreData?.[1] ?? 1; // Default to live
             const homeScores = scoreData?.[2] ?? [0];
             const awayScores = scoreData?.[3] ?? [0];
-            const minute = scoreData?.[4] ?? null;
+            const rawMinute = scoreData?.[4];
+
+            // Parse minute - can be number or string like "45+2"
+            let parsedMinute: number | null = null;
+            if (typeof rawMinute === 'number') {
+                parsedMinute = rawMinute;
+            } else if (typeof rawMinute === 'string') {
+                const minuteStr = rawMinute as string;
+                if (minuteStr.includes('+')) {
+                    const parts = minuteStr.split('+');
+                    parsedMinute = parseInt(parts[0], 10) + parseInt(parts[1], 10);
+                } else {
+                    parsedMinute = parseInt(minuteStr, 10);
+                }
+                if (isNaN(parsedMinute)) parsedMinute = null;
+            }
+
+            // CRITICAL: Adjust minute based on match status
+            // According to TheSports docs, minute resets for each half!
+            let minute: number | null = null;
+            if (parsedMinute !== null) {
+                if (statusId === 5 || statusId === 6) {
+                    // Second half - add 45 to get actual match minute
+                    minute = parsedMinute + 45;
+                } else if (statusId === 7) {
+                    // Extra time - add 90
+                    minute = parsedMinute + 90;
+                } else {
+                    // First half (1,2) or other - use as is
+                    minute = parsedMinute;
+                }
+            }
 
             // All matches from detail_live are live/ongoing
             // Status 1-7 are various live states, 8 is finished
@@ -150,7 +181,7 @@ export async function syncLiveMatches(): Promise<{ synced: number; errors: numbe
                 statusId === 8 ? 'finished' :
                     statusId >= 1 && statusId <= 7 ? 'live' : 'scheduled';
 
-            console.log(`Match ${match.id}: status=${status}, statusId=${statusId}, score=${homeScores[0]}-${awayScores[0]}`);
+            console.log(`Match ${match.id}: status=${status}, statusId=${statusId}, rawMinute=${rawMinute}, adjustedMinute=${minute}`);
 
             // Upsert match - all from detail_live should be live!
             const { error: matchError } = await supabase
