@@ -222,35 +222,124 @@ export async function syncLiveMatches(): Promise<{ synced: number; errors: numbe
 }
 
 /**
- * Sync recent matches from recent/list endpoint
- * This endpoint includes team and competition data
+ * Sync teams and competitions from dedicated API endpoints to Supabase
+ * This populates the teams and competitions tables so matches can have proper names
  */
-export async function syncDailyMatches(date: string): Promise<{ synced: number; errors: number }> {
+export async function syncDailyMatches(_date: string): Promise<{ synced: number; errors: number }> {
     let synced = 0;
     let errors = 0;
 
-    // Use recent/list which has team data instead of diary which may be empty
-    const matches = await fetchFromApi<ApiMatch[]>('/v1/football/match/recent/list');
-    if (!matches || !Array.isArray(matches)) {
-        console.log('No matches from recent/list, trying date endpoint...');
-        return { synced: 0, errors: 1 };
+    console.log('[Sync] Starting team and competition sync to Supabase...');
+
+    // 1. Sync Teams - paginate through all pages
+    console.log('[Sync] Fetching teams...');
+    const allTeams: Array<{
+        id: string;
+        name: string;
+        short_name?: string;
+        logo?: string;
+        country_id?: string;
+    }> = [];
+
+    for (let page = 1; page <= 50; page++) {
+        const url = new URL(`${API_URL}/v1/football/team/additional/list`);
+        url.searchParams.set('user', USERNAME);
+        url.searchParams.set('secret', API_KEY);
+        url.searchParams.set('page', String(page));
+
+        try {
+            const response = await fetch(url.toString(), {
+                headers: { 'Accept': 'application/json' },
+                cache: 'no-store',
+            });
+
+            if (!response.ok) break;
+
+            const data = await response.json();
+            if (data.err) break;
+
+            const teams = data.results || data.data?.results || [];
+            if (teams.length === 0) break;
+
+            allTeams.push(...teams);
+
+            if (teams.length < 1000) break;
+        } catch {
+            break;
+        }
     }
 
-    console.log(`Processing ${matches.length} matches from recent/list for team/competition data`);
+    console.log(`[Sync] Found ${allTeams.length} teams`);
 
-    // Collect unique teams and competitions for upsert
-    const teams = new Map<string, { id: string; name: string; short_name?: string; logo?: string; country_id?: string }>();
-    const competitions = new Map<string, { id: string; name: string; short_name?: string; logo?: string; country_id?: string; primary_color?: string; secondary_color?: string }>();
+    // Insert teams into Supabase in batches
+    if (allTeams.length > 0) {
+        const batchSize = 500;
+        for (let i = 0; i < allTeams.length; i += batchSize) {
+            const batch = allTeams.slice(i, i + batchSize).map(t => ({
+                id: t.id,
+                name: t.name,
+                short_name: t.short_name || null,
+                logo: t.logo || null,
+                country_id: t.country_id || null,
+                updated_at: new Date().toISOString(),
+            }));
 
-    for (const match of matches) {
-        if (match.home_team) teams.set(match.home_team.id, match.home_team);
-        if (match.away_team) teams.set(match.away_team.id, match.away_team);
-        if (match.competition) competitions.set(match.competition.id, match.competition);
+            const { error } = await supabase.from('teams').upsert(batch, { onConflict: 'id' });
+
+            if (error) {
+                console.error('[Sync] Teams batch error:', error);
+                errors += batch.length;
+            } else {
+                synced += batch.length;
+            }
+        }
     }
 
-    // Upsert competitions
-    if (competitions.size > 0) {
-        const compData = Array.from(competitions.values()).map(c => ({
+    // 2. Sync Competitions
+    console.log('[Sync] Fetching competitions...');
+    const allCompetitions: Array<{
+        id: string;
+        name: string;
+        short_name?: string;
+        logo?: string;
+        country_id?: string;
+        primary_color?: string;
+        secondary_color?: string;
+    }> = [];
+
+    for (let page = 1; page <= 10; page++) {
+        const url = new URL(`${API_URL}/v1/football/competition/additional/list`);
+        url.searchParams.set('user', USERNAME);
+        url.searchParams.set('secret', API_KEY);
+        url.searchParams.set('page', String(page));
+
+        try {
+            const response = await fetch(url.toString(), {
+                headers: { 'Accept': 'application/json' },
+                cache: 'no-store',
+            });
+
+            if (!response.ok) break;
+
+            const data = await response.json();
+            if (data.err) break;
+
+            const competitions = data.results || data.data?.results || [];
+            if (competitions.length === 0) break;
+
+            allCompetitions.push(...competitions);
+
+            if (competitions.length < 1000) break;
+        } catch {
+            break;
+        }
+    }
+
+    console.log(`[Sync] Found ${allCompetitions.length} competitions`);
+
+    // Insert competitions into Supabase
+    if (allCompetitions.length > 0) {
+        const compData = allCompetitions.map(c => ({
             id: c.id,
             name: c.name,
             short_name: c.short_name || null,
@@ -261,54 +350,17 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
             updated_at: new Date().toISOString(),
         }));
 
-        await supabase.from('competitions').upsert(compData, { onConflict: 'id' });
-    }
+        const { error } = await supabase.from('competitions').upsert(compData, { onConflict: 'id' });
 
-    // Upsert teams
-    if (teams.size > 0) {
-        const teamData = Array.from(teams.values()).map(t => ({
-            id: t.id,
-            name: t.name,
-            short_name: t.short_name || null,
-            logo: t.logo || null,
-            country_id: t.country_id || null,
-            updated_at: new Date().toISOString(),
-        }));
-
-        await supabase.from('teams').upsert(teamData, { onConflict: 'id' });
-    }
-
-    // Upsert matches
-    for (const match of matches) {
-        try {
-            const { error } = await supabase
-                .from('matches')
-                .upsert({
-                    id: match.id,
-                    home_team_id: match.home_team_id || match.home_team?.id,
-                    away_team_id: match.away_team_id || match.away_team?.id,
-                    competition_id: match.competition_id || match.competition?.id,
-                    status: STATUS_MAP[match.status_id || 0] || 'scheduled',
-                    minute: null,
-                    home_score: match.home_scores?.[0] || 0,
-                    away_score: match.away_scores?.[0] || 0,
-                    start_time: match.match_time ? new Date(match.match_time * 1000).toISOString() : new Date().toISOString(),
-                    venue: match.venue_id || null,
-                    referee: match.referee_id || null,
-                    environment: match.environment || null,
-                    updated_at: new Date().toISOString(),
-                }, { onConflict: 'id' });
-
-            if (error) {
-                errors++;
-            } else {
-                synced++;
-            }
-        } catch (error) {
-            errors++;
+        if (error) {
+            console.error('[Sync] Competitions error:', error);
+            errors += compData.length;
+        } else {
+            synced += compData.length;
         }
     }
 
+    console.log(`[Sync] Completed: synced=${synced}, errors=${errors}`);
     return { synced, errors };
 }
 
