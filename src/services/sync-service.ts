@@ -174,7 +174,8 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
 
     // 3. Fetch from /match/recent/list with pagination (has ALL matches!)
     const allMatches: RecentMatch[] = [];
-    const maxPages = 10; // Limit to prevent infinite loops
+    const maxPages = 30; // Check up to 30 pages (~30,000 matches)
+    let emptyPagesInRow = 0;
 
     for (let page = 1; page <= maxPages; page++) {
         const pageMatches = await fetchFromApi<RecentMatch[]>('/v1/football/match/recent/list', { page: String(page) });
@@ -190,8 +191,18 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
             return m.match_time >= dateStart && m.match_time <= dateEnd;
         });
 
-        console.log(`[Sync] Page ${page}: ${matchesOnDate.length} matches for ${date}`);
-        allMatches.push(...matchesOnDate);
+        if (matchesOnDate.length > 0) {
+            console.log(`[Sync] Page ${page}: ${matchesOnDate.length} matches for ${date}`);
+            allMatches.push(...matchesOnDate);
+            emptyPagesInRow = 0;
+        } else {
+            emptyPagesInRow++;
+            // Stop if 5 consecutive pages have no matches for this date
+            if (emptyPagesInRow >= 5) {
+                console.log(`[Sync] Stopping after ${emptyPagesInRow} empty pages`);
+                break;
+            }
+        }
 
         // If we got less than 1000, we're at the end
         if (pageMatches.length < 1000) break;
