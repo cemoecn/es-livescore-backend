@@ -126,48 +126,77 @@ async function handleMatchUpdate(data: MqttMatchUpdate) {
 }
 
 /**
- * Handle incoming incident (goal, card, etc.)
+ * Handle incoming incidents message
+ * The WebSocket sends the COMPLETE list of incidents for a match on each update
+ * So we need to REPLACE all events for that match, not append
  */
-async function handleIncidentUpdate(data: MqttIncidentUpdate) {
+async function handleIncidentsMessage(matchId: string, incidents: MqttIncidentUpdate[]) {
     try {
-        console.log(`[WS] Incident: match=${data.match_id}, type=${data.type}, time=${data.time}`);
-
-        const { error } = await supabase
-            .from('match_events')
-            .insert({
-                match_id: data.match_id,
-                type: data.type,
-                time: data.time || null,
-                position: data.position || null,
-                player_id: data.player_id || null,
-                player_name: data.player_name || null,
-                player2_id: data.player2_id || null,
-                player2_name: data.player2_name || null,
-                in_player_id: data.in_player_id || null,
-                in_player_name: data.in_player_name || null,
-                out_player_id: data.out_player_id || null,
-                out_player_name: data.out_player_name || null,
-                home_score: data.home_score || null,
-                away_score: data.away_score || null,
-            });
-
-        if (error) {
-            console.error('[WS] Incident insert error:', error.message);
+        if (!matchId || !incidents || incidents.length === 0) {
+            return;
         }
 
-        // Also update match score if scores are provided
-        if (data.home_score !== undefined || data.away_score !== undefined) {
-            await supabase
-                .from('matches')
-                .update({
-                    home_score: data.home_score || 0,
-                    away_score: data.away_score || 0,
-                    updated_at: new Date().toISOString(),
-                })
-                .eq('id', data.match_id);
+        console.log(`[WS] Processing ${incidents.length} incidents for match ${matchId}`);
+
+        // Strategy: Delete all existing events for this match, then insert fresh ones
+        // This ensures we always have the correct, deduplicated list
+
+        // Step 1: Delete all existing events for this match
+        const { error: deleteError } = await supabase
+            .from('match_events')
+            .delete()
+            .eq('match_id', matchId);
+
+        if (deleteError) {
+            console.error(`[WS] Error deleting old events for ${matchId}:`, deleteError.message);
+            // Continue anyway to try inserting
+        }
+
+        // Step 2: Insert all new events
+        const eventsToInsert = incidents.map(incident => ({
+            match_id: matchId,
+            type: incident.type,
+            time: incident.time ?? null,
+            position: incident.position ?? null,
+            player_id: incident.player_id ?? null,
+            player_name: incident.player_name ?? null,
+            player2_id: incident.player2_id ?? null,
+            player2_name: incident.player2_name ?? null,
+            in_player_id: incident.in_player_id ?? null,
+            in_player_name: incident.in_player_name ?? null,
+            out_player_id: incident.out_player_id ?? null,
+            out_player_name: incident.out_player_name ?? null,
+            home_score: incident.home_score ?? null,
+            away_score: incident.away_score ?? null,
+        }));
+
+        const { error: insertError } = await supabase
+            .from('match_events')
+            .insert(eventsToInsert);
+
+        if (insertError) {
+            console.error(`[WS] Error inserting events for ${matchId}:`, insertError.message);
+        } else {
+            console.log(`[WS] ✓ Synced ${incidents.length} events for match ${matchId}`);
+        }
+
+        // Update match score from the latest goal incident
+        const goalIncidents = incidents.filter(i => i.type === 1); // type 1 = goal
+        if (goalIncidents.length > 0) {
+            const lastGoal = goalIncidents[goalIncidents.length - 1];
+            if (lastGoal.home_score !== undefined && lastGoal.away_score !== undefined) {
+                await supabase
+                    .from('matches')
+                    .update({
+                        home_score: lastGoal.home_score,
+                        away_score: lastGoal.away_score,
+                        updated_at: new Date().toISOString(),
+                    })
+                    .eq('id', matchId);
+            }
         }
     } catch (error) {
-        console.error('[WS] Error handling incident:', error);
+        console.error('[WS] Error handling incidents:', error);
     }
 }
 
@@ -234,12 +263,25 @@ export function connectMqtt(): Promise<void> {
                 const data = JSON.parse(message.toString());
 
                 if (topic.includes('match')) {
-                    // Handle as array or single object
+                    // Handle match updates (score, status)
+                    // Format: [{ id: "matchId", score: [...] }] or array of match objects
                     const updates = Array.isArray(data) ? data : [data];
                     updates.forEach(handleMatchUpdate);
                 } else if (topic.includes('incident')) {
+                    // Handle incident updates
+                    // Format: [{ id: "matchId", incidents: [...] }]
+                    // The API sends the COMPLETE list of incidents for a match
                     const updates = Array.isArray(data) ? data : [data];
-                    updates.forEach(handleIncidentUpdate);
+                    updates.forEach((update: { id?: string; match_id?: string; incidents?: MqttIncidentUpdate[] }) => {
+                        const matchId = update.id || update.match_id;
+                        if (matchId && update.incidents && Array.isArray(update.incidents)) {
+                            // Handle complete incident list
+                            handleIncidentsMessage(matchId, update.incidents);
+                        } else if (matchId && !update.incidents) {
+                            // Fallback: single incident (old format)
+                            handleIncidentsMessage(matchId, [update as unknown as MqttIncidentUpdate]);
+                        }
+                    });
                 }
             } catch (error) {
                 console.error('[WS] Error parsing message:', error);
