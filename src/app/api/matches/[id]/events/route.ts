@@ -1,12 +1,10 @@
 /**
  * GET /api/matches/[id]/events
- * Returns match events (goals, cards, substitutions)
- * 
- * Uses endpoints from TheSportsAPI.pdf:
- * - /v1/football/match/detail_live - Real-time data with incidents for ALL live matches
- * - /v1/football/match/live/history - Historical match data with incidents
+ * Returns match events (goals, cards, substitutions) from Supabase
+ * Falls back to TheSports API if not in database
  */
 
+import { supabase } from '@/lib/supabase';
 import { NextRequest, NextResponse } from 'next/server';
 
 const API_URL = process.env.THESPORTS_API_URL || 'https://api.thesports.com';
@@ -20,6 +18,10 @@ interface ApiEvent {
     player_name?: string;
     player2_id?: string;
     player2_name?: string;
+    in_player_id?: string;
+    in_player_name?: string;
+    out_player_id?: string;
+    out_player_name?: string;
     position?: number;
     home_score?: number;
     away_score?: number;
@@ -29,8 +31,6 @@ interface DetailLiveMatch {
     id: string;
     incidents?: ApiEvent[];
     tlive?: ApiEvent[];
-    score?: unknown;
-    stats?: unknown;
 }
 
 export async function GET(
@@ -39,11 +39,47 @@ export async function GET(
 ) {
     try {
         const { id } = await params;
+
+        // 1. Try Supabase first
+        const { data: dbEvents, error: dbError } = await supabase
+            .from('match_events')
+            .select('*')
+            .eq('match_id', id)
+            .order('time', { ascending: true });
+
+        if (!dbError && dbEvents && dbEvents.length > 0) {
+            // Transform to API format
+            const events = dbEvents.map(e => ({
+                type: e.type,
+                time: e.time,
+                position: e.position,
+                player_id: e.player_id,
+                player_name: e.player_name,
+                player2_id: e.player2_id,
+                player2_name: e.player2_name,
+                in_player_id: e.in_player_id,
+                in_player_name: e.in_player_name,
+                out_player_id: e.out_player_id,
+                out_player_name: e.out_player_name,
+                home_score: e.home_score,
+                away_score: e.away_score,
+            }));
+
+            return NextResponse.json({
+                success: true,
+                data: events,
+                matchId: id,
+                source: 'supabase',
+                eventCount: events.length,
+                timestamp: new Date().toISOString(),
+            });
+        }
+
+        // 2. Fallback to TheSports API
         let events: ApiEvent[] = [];
         let source = 'none';
 
-        // 1. Try detail_live first (real-time data for all live matches)
-        // This returns ALL live matches with their incidents - we need to find our match
+        // Try detail_live first
         const detailLiveUrl = `${API_URL}/v1/football/match/detail_live?user=${USERNAME}&secret=${API_KEY}`;
         const detailLiveResponse = await fetch(detailLiveUrl, {
             headers: { 'Accept': 'application/json' },
@@ -53,14 +89,12 @@ export async function GET(
             const detailLiveData = await detailLiveResponse.json();
 
             if (!detailLiveData.err) {
-                // The API can return results at the top level or inside data
                 const matches: DetailLiveMatch[] = Array.isArray(detailLiveData.results)
                     ? detailLiveData.results
                     : (Array.isArray(detailLiveData.data)
                         ? detailLiveData.data
                         : (detailLiveData.data?.results || []));
 
-                // Find our specific match
                 const match = matches.find(m => String(m.id) === String(id));
 
                 if (match) {
@@ -74,7 +108,7 @@ export async function GET(
             }
         }
 
-        // 2. If no events from detail_live, try live/history (for historical data)
+        // Try live/history as fallback
         if (events.length === 0) {
             const historyUrl = `${API_URL}/v1/football/match/live/history?user=${USERNAME}&secret=${API_KEY}&id=${id}`;
             const historyResponse = await fetch(historyUrl, {
@@ -94,27 +128,6 @@ export async function GET(
                         events = matchData.incidents;
                     } else if (matchData?.tlive && Array.isArray(matchData.tlive)) {
                         events = matchData.tlive;
-                    }
-                }
-            }
-        }
-
-        // 3. Fallback: try team_stats/detail which might have event data
-        if (events.length === 0) {
-            const statsUrl = `${API_URL}/v1/football/match/team_stats/detail?user=${USERNAME}&secret=${API_KEY}&id=${id}`;
-            const statsResponse = await fetch(statsUrl, {
-                headers: { 'Accept': 'application/json' },
-            });
-
-            if (statsResponse.ok) {
-                const statsData = await statsResponse.json();
-                if (!statsData.err && statsData.data) {
-                    const matchStats = Array.isArray(statsData.data)
-                        ? statsData.data[0]
-                        : statsData.data;
-                    if (matchStats?.incidents && Array.isArray(matchStats.incidents)) {
-                        source = 'team_stats/detail';
-                        events = matchStats.incidents;
                     }
                 }
             }
