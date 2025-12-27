@@ -180,6 +180,8 @@ export function connectMqtt(): Promise<void> {
             reconnectPeriod: 5000,
             connectTimeout: 30000,
             protocolVersion: 4,
+            // Skip SSL certificate verification (TheSports uses a cert that can't be verified)
+            rejectUnauthorized: false,
         });
 
         client.on('connect', () => {
