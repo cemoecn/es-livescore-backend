@@ -1,9 +1,10 @@
 /**
  * Simplified Sync Service
- * Syncs matches directly with team names - NO JOINs needed!
+ * Uses Cache Service to get team names - NO JOINs needed!
  */
 
 import { supabase } from '@/lib/supabase';
+import { ensureCachesLoaded, getTeamById, getCompetitionById, getCacheStats } from './cache';
 
 const API_URL = process.env.THESPORTS_API_URL || 'https://api.thesports.com';
 const API_KEY = process.env.THESPORTS_API_KEY || '';
@@ -65,7 +66,7 @@ async function fetchFromApi<T>(endpoint: string, params: Record<string, string> 
  */
 function calculateMinute(rawMinute: number | string | undefined, statusId: number): number | null {
     if (rawMinute === undefined || rawMinute === null) return null;
-
+    
     let minute = typeof rawMinute === 'string' ? parseInt(rawMinute, 10) : rawMinute;
     if (isNaN(minute)) return null;
 
@@ -87,14 +88,13 @@ interface LiveMatchScore {
 /**
  * Sync live match STATUS only (score, minute, status)
  * Does NOT create new matches or update team names
- * Team names come from syncDailyMatches
  */
 export async function syncLiveMatches(): Promise<{ synced: number; errors: number }> {
     let synced = 0;
     let errors = 0;
 
     console.log('[Sync] Fetching live matches...');
-
+    
     const matches = await fetchFromApi<LiveMatchScore[]>('/v1/football/match/detail_live');
 
     if (!matches || !Array.isArray(matches) || matches.length === 0) {
@@ -108,17 +108,17 @@ export async function syncLiveMatches(): Promise<{ synced: number; errors: numbe
         try {
             const score = match.score;
             if (!score || !Array.isArray(score)) continue;
-
+            
             const statusId = score[1] ?? 1;
             const homeScores = score[2] ?? [0];
             const awayScores = score[3] ?? [0];
             const rawMinute = score[4];
-
+            
             const status = STATUS_MAP[statusId] || 'live';
             const minute = calculateMinute(rawMinute, statusId);
 
-            // UPDATE existing match only - don't create new ones
-            const { error, count } = await supabase
+            // UPDATE existing match only
+            const { error } = await supabase
                 .from('matches')
                 .update({
                     status: status,
@@ -129,17 +129,14 @@ export async function syncLiveMatches(): Promise<{ synced: number; errors: numbe
                 })
                 .eq('id', match.id);
 
-            if (error) {
-                errors++;
-            } else if (count && count > 0) {
-                synced++;
-            }
+            if (!error) synced++;
+            else errors++;
         } catch {
             errors++;
         }
     }
 
-    console.log(`[Sync] Live update complete: ${synced} updated, ${errors} errors`);
+    console.log(`[Sync] Live update: ${synced} updated, ${errors} errors`);
     return { synced, errors };
 }
 
@@ -155,90 +152,55 @@ interface DiaryMatch {
 }
 
 /**
- * DAILY SYNC: Creates/updates matches WITH team names
- * This is the main function that populates team data!
+ * DAILY SYNC: Creates/updates matches WITH team names from Cache
  */
 export async function syncDailyMatches(date: string): Promise<{ synced: number; errors: number }> {
     let synced = 0;
     let errors = 0;
 
     console.log(`[Sync] Starting daily sync for ${date}`);
-
-    // 1. Fetch matches for the date
+    
+    // 1. Load caches first! This is the key step.
+    console.log('[Sync] Loading team/competition caches...');
+    await ensureCachesLoaded();
+    
+    const stats = getCacheStats();
+    console.log(`[Sync] Cache stats: ${stats.teams} teams, ${stats.competitions} competitions`);
+    
+    // 2. Fetch matches for the date
     const apiDate = date.replace(/-/g, '');
     console.log(`[Sync] Fetching diary matches for ${apiDate}...`);
-
+    
     const diaryMatches = await fetchFromApi<DiaryMatch[]>('/v1/football/match/diary', { date: apiDate });
 
     if (!diaryMatches || !Array.isArray(diaryMatches) || diaryMatches.length === 0) {
         console.log('[Sync] No diary matches found');
         return { synced: 0, errors: 0 };
     }
-
+    
     console.log(`[Sync] Found ${diaryMatches.length} diary matches`);
 
-    // 2. Collect all team and competition IDs
-    const teamIds = new Set<string>();
-    const compIds = new Set<string>();
-
-    for (const m of diaryMatches) {
-        if (m.home_team_id) teamIds.add(m.home_team_id);
-        if (m.away_team_id) teamIds.add(m.away_team_id);
-        if (m.competition_id) compIds.add(m.competition_id);
-    }
-
-    console.log(`[Sync] Need ${teamIds.size} teams and ${compIds.size} competitions`);
-
-    // 3. Fetch team and competition details
-    const teamsMap = new Map<string, { name: string; logo?: string }>();
-    const compsMap = new Map<string, { name: string; logo?: string; country?: string }>();
-
-    // Fetch teams (batch by 100)
-    const teamIdArray = Array.from(teamIds);
-    for (let i = 0; i < teamIdArray.length; i += 100) {
-        const batch = teamIdArray.slice(i, i + 100).join(',');
-        const teamData = await fetchFromApi<Array<{ id: string; name: string; logo?: string }>>('/v1/football/team/additional/list', { uuid: batch });
-        if (teamData && Array.isArray(teamData)) {
-            for (const t of teamData) {
-                teamsMap.set(t.id, { name: t.name, logo: t.logo });
-            }
-        }
-    }
-
-    // Fetch competitions (batch by 100)
-    const compIdArray = Array.from(compIds);
-    for (let i = 0; i < compIdArray.length; i += 100) {
-        const batch = compIdArray.slice(i, i + 100).join(',');
-        const compData = await fetchFromApi<Array<{ id: string; name: string; short_name?: string; logo?: string; country_id?: string }>>('/v1/football/competition/additional/list', { uuid: batch });
-        if (compData && Array.isArray(compData)) {
-            for (const c of compData) {
-                compsMap.set(c.id, { name: c.short_name || c.name, logo: c.logo, country: c.country_id });
-            }
-        }
-    }
-
-    console.log(`[Sync] Loaded ${teamsMap.size} teams, ${compsMap.size} competitions from API`);
-
-    // 4. Upsert matches with denormalized team names
+    // 3. Upsert matches with team names from cache
     for (const match of diaryMatches) {
         try {
-            const homeTeam = teamsMap.get(match.home_team_id || '') || { name: 'TBD', logo: '' };
-            const awayTeam = teamsMap.get(match.away_team_id || '') || { name: 'TBD', logo: '' };
-            const comp = compsMap.get(match.competition_id || '') || { name: 'Unknown', logo: '', country: '' };
-
+            // Get team and competition data from CACHE
+            const homeTeam = getTeamById(match.home_team_id || '');
+            const awayTeam = getTeamById(match.away_team_id || '');
+            const comp = getCompetitionById(match.competition_id || '');
+            
             const statusId = match.status_id ?? 0;
             const status = STATUS_MAP[statusId] || 'scheduled';
 
             const { error } = await supabase.from('matches').upsert({
                 id: match.id,
-                // DENORMALIZED team names - this is the key!
-                home_team_name: homeTeam.name,
-                home_team_logo: homeTeam.logo || '',
-                away_team_name: awayTeam.name,
-                away_team_logo: awayTeam.logo || '',
-                competition_name: comp.name,
-                competition_logo: comp.logo || '',
-                competition_country: comp.country || '',
+                // DENORMALIZED team names from cache!
+                home_team_name: homeTeam?.name || 'TBD',
+                home_team_logo: homeTeam?.logo || '',
+                away_team_name: awayTeam?.name || 'TBD',
+                away_team_logo: awayTeam?.logo || '',
+                competition_name: comp?.short_name || comp?.name || 'Unknown',
+                competition_logo: comp?.logo || '',
+                competition_country: comp?.country_id || '',
                 // IDs for reference
                 home_team_id: match.home_team_id || null,
                 away_team_id: match.away_team_id || null,
@@ -252,6 +214,7 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
             }, { onConflict: 'id' });
 
             if (error) {
+                if (synced < 3) console.error(`[Sync] Match ${match.id} error:`, error.message);
                 errors++;
             } else {
                 synced++;
@@ -262,8 +225,8 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
     }
 
     console.log(`[Sync] Daily sync complete: ${synced} matches synced, ${errors} errors`);
-
-    // 5. Now update live scores for any currently live matches
+    
+    // 4. Update live scores
     const liveResult = await syncLiveMatches();
     console.log(`[Sync] Live update: ${liveResult.synced} updated`);
 
@@ -272,13 +235,12 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
 
 /**
  * WebSocket update - ONLY updates score/minute/status
- * Does NOT overwrite team names!
  */
 export async function updateMatchLive(
-    matchId: string,
-    status: string,
-    minute: number | null,
-    homeScore: number,
+    matchId: string, 
+    status: string, 
+    minute: number | null, 
+    homeScore: number, 
     awayScore: number
 ): Promise<void> {
     const { error } = await supabase
