@@ -105,23 +105,42 @@ async function handleMatchUpdate(data: any) {
 
             // Parse minute - can be number, string, or string like "45+2"
             const rawMinute = scoreData[4];
+            let parsedMinute: number | null = null;
+
             if (typeof rawMinute === 'number') {
-                minute = rawMinute;
+                parsedMinute = rawMinute;
             } else if (typeof rawMinute === 'string') {
                 // Handle formats like "45+2" -> 47, or just "67" -> 67
                 if (rawMinute.includes('+')) {
                     const parts = rawMinute.split('+');
-                    minute = parseInt(parts[0], 10) + parseInt(parts[1], 10);
+                    parsedMinute = parseInt(parts[0], 10) + parseInt(parts[1], 10);
                 } else {
-                    minute = parseInt(rawMinute, 10);
+                    parsedMinute = parseInt(rawMinute, 10);
                 }
-                if (isNaN(minute)) minute = null;
+                if (isNaN(parsedMinute)) parsedMinute = null;
+            }
+
+            // CRITICAL: Adjust minute based on match status
+            // According to TheSports docs, minute resets for each half!
+            // Status 5/6 = second half, so add 45
+            // Status 7 = extra time, so add 90
+            if (parsedMinute !== null) {
+                if (statusId === 5 || statusId === 6) {
+                    // Second half - add 45 to get actual match minute
+                    minute = parsedMinute + 45;
+                } else if (statusId === 7) {
+                    // Extra time - add 90
+                    minute = parsedMinute + 90;
+                } else {
+                    // First half (1,2) or other - use as is
+                    minute = parsedMinute;
+                }
             } else {
                 minute = null;
             }
 
             // Log detailed info for debugging
-            console.log(`[WS] Match ${data.id}: statusId=${statusId}, rawMinute=${JSON.stringify(rawMinute)}, parsedMinute=${minute}`);
+            console.log(`[WS] Match ${data.id}: statusId=${statusId}, rawMinute=${JSON.stringify(rawMinute)}, adjustedMinute=${minute}`);
         } else {
             // Fallback to flat format
             statusId = data.status_id ?? 1;
