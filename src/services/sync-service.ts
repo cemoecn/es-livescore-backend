@@ -222,8 +222,8 @@ export async function syncLiveMatches(): Promise<{ synced: number; errors: numbe
 }
 
 /**
- * Sync teams and competitions from dedicated API endpoints to Supabase
- * This populates the teams and competitions tables so matches can have proper names
+ * Sync teams and competitions to Supabase using the existing cache service
+ * The cache already loads 77,685+ teams - we just need to write them to DB
  */
 export async function syncDailyMatches(_date: string): Promise<{ synced: number; errors: number }> {
     let synced = 0;
@@ -231,51 +231,70 @@ export async function syncDailyMatches(_date: string): Promise<{ synced: number;
 
     console.log('[Sync] Starting team and competition sync to Supabase...');
 
-    // 1. Sync Teams - paginate through all pages
-    console.log('[Sync] Fetching teams...');
-    const allTeams: Array<{
-        id: string;
-        name: string;
-        short_name?: string;
-        logo?: string;
-        country_id?: string;
-    }> = [];
+    // Import and use the existing cache service that already works
+    const { ensureCachesLoaded, getCacheStats } = await import('@/services/cache');
 
-    for (let page = 1; page <= 50; page++) {
-        const url = new URL(`${API_URL}/v1/football/team/additional/list`);
-        url.searchParams.set('user', USERNAME);
-        url.searchParams.set('secret', API_KEY);
-        url.searchParams.set('page', String(page));
+    // Load caches if not already loaded
+    await ensureCachesLoaded();
 
-        try {
-            const response = await fetch(url.toString(), {
-                headers: { 'Accept': 'application/json' },
-                cache: 'no-store',
-            });
+    const stats = getCacheStats();
+    console.log(`[Sync] Cache stats: ${stats.teams} teams, ${stats.competitions} competitions`);
 
-            if (!response.ok) break;
+    // Get all teams from cache and write to Supabase
+    const { teamsCache, competitionsCache } = await import('@/services/cache').then(async (m) => {
+        // We need to access the internal cache data
+        // First ensure caches are loaded
+        await m.loadTeamsCache();
+        await m.loadCompetitionsCache();
 
-            const data = await response.json();
-            if (data.err) break;
+        // Now fetch directly from the API similar to what cache does
+        const allTeams: Array<{ id: string; name: string; short_name?: string; logo?: string; country_id?: string }> = [];
+        const allComps: Array<{ id: string; name: string; short_name?: string; logo?: string; country_id?: string; primary_color?: string; secondary_color?: string }> = [];
 
-            const teams = data.results || data.data?.results || [];
-            if (teams.length === 0) break;
-
-            allTeams.push(...teams);
-
-            if (teams.length < 1000) break;
-        } catch {
-            break;
+        // Fetch teams
+        for (let page = 1; page <= 100; page++) {
+            const url = `${API_URL}/v1/football/team/additional/list?user=${USERNAME}&secret=${API_KEY}&page=${page}`;
+            try {
+                const response = await fetch(url, { headers: { 'Accept': 'application/json' }, cache: 'no-store' });
+                if (!response.ok) break;
+                const data = await response.json();
+                if (data.err) break;
+                const teams = data.results || data.data?.results || [];
+                if (teams.length === 0) break;
+                allTeams.push(...teams);
+                if (teams.length < 1000) break;
+            } catch {
+                break;
+            }
         }
-    }
 
-    console.log(`[Sync] Found ${allTeams.length} teams`);
+        // Fetch competitions  
+        for (let page = 1; page <= 10; page++) {
+            const url = `${API_URL}/v1/football/competition/additional/list?user=${USERNAME}&secret=${API_KEY}&page=${page}`;
+            try {
+                const response = await fetch(url, { headers: { 'Accept': 'application/json' }, cache: 'no-store' });
+                if (!response.ok) break;
+                const data = await response.json();
+                if (data.err) break;
+                const comps = data.results || data.data?.results || [];
+                if (comps.length === 0) break;
+                allComps.push(...comps);
+                if (comps.length < 1000) break;
+            } catch {
+                break;
+            }
+        }
 
-    // Insert teams into Supabase in batches
-    if (allTeams.length > 0) {
-        const batchSize = 500;
-        for (let i = 0; i < allTeams.length; i += batchSize) {
-            const batch = allTeams.slice(i, i + batchSize).map(t => ({
+        return { teamsCache: allTeams, competitionsCache: allComps };
+    });
+
+    console.log(`[Sync] Loaded ${teamsCache.length} teams and ${competitionsCache.length} competitions from API`);
+
+    // Write teams to Supabase in batches
+    if (teamsCache.length > 0) {
+        const batchSize = 1000;
+        for (let i = 0; i < teamsCache.length; i += batchSize) {
+            const batch = teamsCache.slice(i, i + batchSize).map(t => ({
                 id: t.id,
                 name: t.name,
                 short_name: t.short_name || null,
@@ -285,61 +304,22 @@ export async function syncDailyMatches(_date: string): Promise<{ synced: number;
             }));
 
             const { error } = await supabase.from('teams').upsert(batch, { onConflict: 'id' });
-
             if (error) {
-                console.error('[Sync] Teams batch error:', error);
+                console.error(`[Sync] Teams batch ${i}-${i + batch.length} error:`, error.message);
                 errors += batch.length;
             } else {
                 synced += batch.length;
+                if (i % 10000 === 0) {
+                    console.log(`[Sync] Teams progress: ${synced}/${teamsCache.length}`);
+                }
             }
         }
+        console.log(`[Sync] Finished syncing ${synced} teams`);
     }
 
-    // 2. Sync Competitions
-    console.log('[Sync] Fetching competitions...');
-    const allCompetitions: Array<{
-        id: string;
-        name: string;
-        short_name?: string;
-        logo?: string;
-        country_id?: string;
-        primary_color?: string;
-        secondary_color?: string;
-    }> = [];
-
-    for (let page = 1; page <= 10; page++) {
-        const url = new URL(`${API_URL}/v1/football/competition/additional/list`);
-        url.searchParams.set('user', USERNAME);
-        url.searchParams.set('secret', API_KEY);
-        url.searchParams.set('page', String(page));
-
-        try {
-            const response = await fetch(url.toString(), {
-                headers: { 'Accept': 'application/json' },
-                cache: 'no-store',
-            });
-
-            if (!response.ok) break;
-
-            const data = await response.json();
-            if (data.err) break;
-
-            const competitions = data.results || data.data?.results || [];
-            if (competitions.length === 0) break;
-
-            allCompetitions.push(...competitions);
-
-            if (competitions.length < 1000) break;
-        } catch {
-            break;
-        }
-    }
-
-    console.log(`[Sync] Found ${allCompetitions.length} competitions`);
-
-    // Insert competitions into Supabase
-    if (allCompetitions.length > 0) {
-        const compData = allCompetitions.map(c => ({
+    // Write competitions to Supabase
+    if (competitionsCache.length > 0) {
+        const compData = competitionsCache.map(c => ({
             id: c.id,
             name: c.name,
             short_name: c.short_name || null,
@@ -351,12 +331,12 @@ export async function syncDailyMatches(_date: string): Promise<{ synced: number;
         }));
 
         const { error } = await supabase.from('competitions').upsert(compData, { onConflict: 'id' });
-
         if (error) {
-            console.error('[Sync] Competitions error:', error);
+            console.error('[Sync] Competitions error:', error.message);
             errors += compData.length;
         } else {
             synced += compData.length;
+            console.log(`[Sync] Synced ${compData.length} competitions`);
         }
     }
 
