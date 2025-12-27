@@ -95,6 +95,8 @@ const STATUS_MAP: Record<number, EnrichedMatch['status']> = {
 
 /**
  * Calculate approximate match minute
+ * Note: This is only used for API fallback when Supabase has no data
+ * The primary path uses minute value directly from Supabase (set by WebSocket service)
  */
 function calculateMinute(statusId: number, matchTime: number): number | null {
     if (statusId >= 2 && statusId <= 7) {
@@ -102,15 +104,16 @@ function calculateMinute(statusId: number, matchTime: number): number | null {
         const elapsedSeconds = now - matchTime;
         const elapsedMinutes = Math.floor(elapsedSeconds / 60);
 
-        if (statusId === 3) return 45; // Half-time
-        if (statusId === 2) return Math.min(45, Math.max(1, elapsedMinutes));
-        if (statusId === 4) return Math.min(90, Math.max(46, elapsedMinutes));
-        if (statusId >= 5) return 90;
+        if (statusId === 3) return null; // Half-time - no minute
+        if (statusId === 2) return Math.max(1, elapsedMinutes); // First half
+        // For second half - matchTime should be second half kickoff, so just add 45
+        if (statusId === 4) return Math.max(46, elapsedMinutes + 45);
+        if (statusId >= 5) return elapsedMinutes + 90; // Overtime
 
         return Math.max(0, elapsedMinutes);
     }
 
-    if (statusId === 8) return 90;
+    if (statusId === 8) return null; // Finished - no minute
 
     return null;
 }
