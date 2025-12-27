@@ -1,31 +1,23 @@
 /**
  * GET /api/cron/sync-live
- * Cron job to sync live matches from TheSports API to Supabase
- * Should be called every 5-10 seconds for real-time updates
+ * 
+ * DISABLED: Live match updates now come through WebSocket only.
+ * This endpoint has been disabled to avoid conflicts with WebSocket data.
+ * 
+ * Previous functionality: Cron job to sync live matches from TheSports API to Supabase
  */
 
-import { syncLiveMatches } from '@/services/sync-service';
 import { NextResponse } from 'next/server';
 
 export async function GET() {
-    try {
-        const result = await syncLiveMatches();
-
-        return NextResponse.json({
-            success: true,
-            ...result,
-            timestamp: new Date().toISOString(),
-        });
-    } catch (error) {
-        console.error('Sync live error:', error);
-        return NextResponse.json(
-            {
-                success: false,
-                error: error instanceof Error ? error.message : 'Unknown error',
-            },
-            { status: 500 }
-        );
-    }
+    // Return immediately - live updates now handled by WebSocket only
+    return NextResponse.json({
+        success: true,
+        message: 'Live sync disabled - using WebSocket for real-time updates',
+        synced: 0,
+        errors: 0,
+        timestamp: new Date().toISOString(),
+    });
 }
 
 // Force dynamic to prevent caching
