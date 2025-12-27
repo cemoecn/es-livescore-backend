@@ -49,22 +49,23 @@ interface MqttIncidentUpdate {
     away_score?: number;
 }
 
-// Status mapping
+// Status mapping - OFFICIAL TheSports values
+// https://www.thesports.com docs
 const STATUS_MAP: Record<number, string> = {
-    0: 'scheduled',
-    1: 'live',
-    2: 'live',
-    3: 'live',
-    4: 'halftime',
-    5: 'live',
-    6: 'live',
-    7: 'live',
-    8: 'finished',
-    9: 'finished',
-    10: 'postponed',
-    11: 'cancelled',
-    12: 'interrupted',
-    13: 'suspended',
+    0: 'scheduled',   // Abnormal (suggest hiding)
+    1: 'scheduled',   // Not started
+    2: 'live',        // First half
+    3: 'halftime',    // Half-time
+    4: 'live',        // Second half
+    5: 'live',        // Overtime
+    6: 'live',        // Overtime (deprecated)
+    7: 'live',        // Penalty Shoot-out
+    8: 'finished',    // End
+    9: 'live',        // Delay
+    10: 'interrupted',// Interrupt
+    11: 'live',       // Cut in half
+    12: 'cancelled',  // Cancel
+    13: 'scheduled',  // To be determined
 };
 
 /**
@@ -72,17 +73,18 @@ const STATUS_MAP: Record<number, string> = {
  * Uses UPSERT to prevent race conditions and duplicate key errors
  * 
  * TheSports WebSocket sends data in this format:
- * { id, score: [matchId, statusId, homeScores[], awayScores[], minute, extra], stats, incidents, tlive }
+ * { id, score: [matchId, statusId, homeScores[], awayScores[], kickoffTimestamp, extra], stats, incidents, tlive }
  * 
- * Status IDs:
- * 1 = First half
- * 2 = First half (injury time)
- * 3 = Half-time break
- * 4 = Half-time (interval)
- * 5 = Second half
- * 6 = Second half (injury time)
- * 7 = Extra time
- * 8 = Finished
+ * OFFICIAL Status IDs (from TheSports docs):
+ * 0 = Abnormal
+ * 1 = Not started
+ * 2 = First half
+ * 3 = Half-time
+ * 4 = Second half
+ * 5 = Overtime
+ * 6 = Overtime (deprecated)
+ * 7 = Penalty Shoot-out
+ * 8 = End
  */
 async function handleMatchUpdate(data: any) {
     try {
@@ -140,26 +142,28 @@ async function handleMatchUpdate(data: any) {
                     if (isNaN(parsedMinute)) parsedMinute = null;
                 }
 
-                // Adjust minute based on match status
-                // Status 3/4 = halftime, minute should be null
-                // Status 5/6 = second half, add 45 (timestamp is 2nd half kickoff)
-                // Status 7 = extra time, add 90
-                // Status 8 = finished
+                // Adjust minute based on OFFICIAL match status codes
+                // 2 = First half (use minute as-is)
+                // 3 = Half-time (no minute)
+                // 4 = Second half (add 45)
+                // 5/6 = Overtime (add 90)
+                // 7 = Penalty shoot-out (no minute typically)
+                // 8 = End (no minute)
                 if (parsedMinute !== null && parsedMinute >= 0) {
-                    if (statusId === 3 || statusId === 4) {
-                        // Halftime - don't show a minute, use null
+                    if (statusId === 3) {
+                        // Halftime - don't show a minute
                         minute = null;
-                    } else if (statusId === 5 || statusId === 6) {
+                    } else if (statusId === 4) {
                         // Second half - add 45 since kickoff timestamp is for 2nd half
                         minute = parsedMinute + 45;
-                    } else if (statusId === 7) {
-                        // Extra time - add 90
+                    } else if (statusId === 5 || statusId === 6) {
+                        // Overtime - add 90
                         minute = parsedMinute + 90;
-                    } else if (statusId === 8) {
-                        // Finished - don't need minute
+                    } else if (statusId === 7 || statusId === 8) {
+                        // Penalties or End - no minute needed
                         minute = null;
                     } else {
-                        // First half (1,2) or scheduled (0) - use as is
+                        // First half (2), Not started (1), etc. - use as is
                         minute = parsedMinute;
                     }
                 }
