@@ -113,38 +113,61 @@ async function fetchFromApi<T>(endpoint: string, params: Record<string, string> 
 
 /**
  * Sync live matches from detail_live endpoint
+ * The detail_live endpoint returns matches in this format:
+ * { id, score: [matchId, statusId, homeScores[], awayScores[], minute, extra], stats, incidents, tlive }
  */
 export async function syncLiveMatches(): Promise<{ synced: number; errors: number }> {
     let synced = 0;
     let errors = 0;
 
-    const matches = await fetchFromApi<ApiMatch[]>('/v1/football/match/detail_live');
+    const matches = await fetchFromApi<Array<{
+        id: string;
+        score?: [string, number, number[], number[], number, string]; // [matchId, status, homeScores, awayScores, minute, extra]
+        stats?: unknown[];
+        incidents?: ApiIncident[];
+        tlive?: unknown[];
+    }>>('/v1/football/match/detail_live');
+
     if (!matches || !Array.isArray(matches)) {
+        console.log('No matches from detail_live');
         return { synced: 0, errors: 1 };
     }
 
+    console.log(`Processing ${matches.length} live matches from detail_live`);
+
     for (const match of matches) {
         try {
-            // Calculate current minute from status
-            const minute = match.status_id === 4 ? 45 :
-                (match.status_id && match.status_id >= 5) ? 90 : null;
+            // Parse score array: [matchId, statusId, homeScores[], awayScores[], minute, extra]
+            const scoreData = match.score;
+            const statusId = scoreData?.[1] ?? 1; // Default to live
+            const homeScores = scoreData?.[2] ?? [0];
+            const awayScores = scoreData?.[3] ?? [0];
+            const minute = scoreData?.[4] ?? null;
 
-            // Upsert match
+            // All matches from detail_live are live/ongoing
+            // Status 1-7 are various live states, 8 is finished
+            const status = statusId === 4 ? 'halftime' :
+                statusId === 8 ? 'finished' :
+                    statusId >= 1 && statusId <= 7 ? 'live' : 'scheduled';
+
+            console.log(`Match ${match.id}: status=${status}, statusId=${statusId}, score=${homeScores[0]}-${awayScores[0]}`);
+
+            // Upsert match - all from detail_live should be live!
             const { error: matchError } = await supabase
                 .from('matches')
                 .upsert({
                     id: match.id,
-                    home_team_id: match.home_team_id,
-                    away_team_id: match.away_team_id,
-                    competition_id: match.competition_id,
-                    status: STATUS_MAP[match.status_id || 0] || 'unknown',
+                    home_team_id: null, // detail_live doesn't include team IDs
+                    away_team_id: null,
+                    competition_id: null,
+                    status: status,
                     minute: minute,
-                    home_score: match.home_scores?.[0] || 0,
-                    away_score: match.away_scores?.[0] || 0,
-                    start_time: match.match_time ? new Date(match.match_time * 1000).toISOString() : new Date().toISOString(),
-                    venue: match.venue_id || null,
-                    referee: match.referee_id || null,
-                    environment: match.environment || null,
+                    home_score: homeScores[0] || 0,
+                    away_score: awayScores[0] || 0,
+                    start_time: new Date().toISOString(), // detail_live doesn't include start time
+                    venue: null,
+                    referee: null,
+                    environment: null,
                     updated_at: new Date().toISOString(),
                 }, { onConflict: 'id' });
 
@@ -155,7 +178,7 @@ export async function syncLiveMatches(): Promise<{ synced: number; errors: numbe
             }
 
             // Sync incidents if available
-            if (match.incidents && Array.isArray(match.incidents)) {
+            if (match.incidents && Array.isArray(match.incidents) && match.incidents.length > 0) {
                 // Delete old events for this match
                 await supabase.from('match_events').delete().eq('match_id', match.id);
 
