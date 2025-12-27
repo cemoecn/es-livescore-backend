@@ -361,34 +361,63 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
     if (matchesResponse && Array.isArray(matchesResponse)) {
         console.log(`[Sync] Found ${matchesResponse.length} matches for ${date}`);
 
+        // Get all existing match IDs to check which need INSERT vs UPDATE
+        const matchIds = matchesResponse.map(m => m.id);
+        const { data: existingMatches } = await supabase
+            .from('matches')
+            .select('id')
+            .in('id', matchIds);
+
+        const existingIds = new Set((existingMatches || []).map(m => m.id));
+
         for (const match of matchesResponse) {
             try {
                 const statusId = match.status_id ?? 0;
                 const status = STATUS_MAP[statusId] || 'scheduled';
 
-                const { error } = await supabase
-                    .from('matches')
-                    .upsert({
-                        id: match.id,
-                        home_team_id: match.home_team_id || null,
-                        away_team_id: match.away_team_id || null,
-                        competition_id: match.competition_id || null,
-                        status: status,
-                        minute: null, // Will be updated by WebSocket
-                        home_score: match.home_scores?.[0] || 0,
-                        away_score: match.away_scores?.[0] || 0,
-                        start_time: match.match_time ? new Date(match.match_time * 1000).toISOString() : new Date().toISOString(),
-                        venue: null,
-                        referee: null,
-                        environment: null,
-                        updated_at: new Date().toISOString(),
-                    }, { onConflict: 'id' });
+                if (existingIds.has(match.id)) {
+                    // Match exists - ONLY update team_ids and start_time
+                    // DO NOT touch status, minute, score (WebSocket handles those)
+                    const { error } = await supabase
+                        .from('matches')
+                        .update({
+                            home_team_id: match.home_team_id || null,
+                            away_team_id: match.away_team_id || null,
+                            competition_id: match.competition_id || null,
+                            start_time: match.match_time ? new Date(match.match_time * 1000).toISOString() : undefined,
+                        })
+                        .eq('id', match.id);
 
-                if (error) {
-                    console.error(`[Sync] Match ${match.id} error:`, error.message);
-                    errors++;
+                    if (error) {
+                        errors++;
+                    } else {
+                        synced++;
+                    }
                 } else {
-                    synced++;
+                    // New match - INSERT with all data
+                    const { error } = await supabase
+                        .from('matches')
+                        .insert({
+                            id: match.id,
+                            home_team_id: match.home_team_id || null,
+                            away_team_id: match.away_team_id || null,
+                            competition_id: match.competition_id || null,
+                            status: status,
+                            minute: null,
+                            home_score: match.home_scores?.[0] || 0,
+                            away_score: match.away_scores?.[0] || 0,
+                            start_time: match.match_time ? new Date(match.match_time * 1000).toISOString() : new Date().toISOString(),
+                            venue: null,
+                            referee: null,
+                            environment: null,
+                            updated_at: new Date().toISOString(),
+                        });
+
+                    if (error) {
+                        errors++;
+                    } else {
+                        synced++;
+                    }
                 }
             } catch (err) {
                 console.error(`[Sync] Match ${match.id} exception:`, err);
