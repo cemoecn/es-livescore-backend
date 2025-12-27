@@ -87,13 +87,16 @@ const STATUS_MAP: Record<number, string> = {
 async function handleMatchUpdate(data: any) {
     try {
         // Parse the score array if present
-        // Format: [matchId, statusId, homeScores[], awayScores[], minute, extra]
+        // Format: [matchId, statusId, homeScores[], awayScores[], kickoffTimestamp, extra]
+        // According to TheSports docs, position 4 is the kick-off timestamp, NOT the minute!
+        // We need to calculate: minute = (now - kickoffTimestamp) / 60000
+        // For second half, the kickoffTimestamp is the 2nd half kickoff, so we add 45
         const scoreData = data.score;
 
         let statusId: number;
         let homeScore: number;
         let awayScore: number;
-        let minute: number | null;
+        let minute: number | null = null;
 
         if (Array.isArray(scoreData) && scoreData.length >= 5) {
             // New format with score array
@@ -103,44 +106,55 @@ async function handleMatchUpdate(data: any) {
             homeScore = Array.isArray(homeScores) ? (homeScores[0] || 0) : (homeScores || 0);
             awayScore = Array.isArray(awayScores) ? (awayScores[0] || 0) : (awayScores || 0);
 
-            // Parse minute - can be number, string, or string like "45+2"
-            const rawMinute = scoreData[4];
-            let parsedMinute: number | null = null;
+            // Position 4: Could be kick-off timestamp OR direct minute value
+            // If it's a large number (> 1000000000), it's a Unix timestamp
+            // If it's a small number (< 200), it's a direct minute value
+            const rawValue = scoreData[4];
 
-            if (typeof rawMinute === 'number') {
-                parsedMinute = rawMinute;
-            } else if (typeof rawMinute === 'string') {
-                // Handle formats like "45+2" -> 47, or just "67" -> 67
-                if (rawMinute.includes('+')) {
-                    const parts = rawMinute.split('+');
-                    parsedMinute = parseInt(parts[0], 10) + parseInt(parts[1], 10);
-                } else {
-                    parsedMinute = parseInt(rawMinute, 10);
+            console.log(`[WS] Match ${data.id}: rawValue=${rawValue}, typeof=${typeof rawValue}`);
+
+            if (rawValue !== null && rawValue !== undefined) {
+                let parsedMinute: number | null = null;
+
+                if (typeof rawValue === 'number') {
+                    if (rawValue > 1000000000) {
+                        // It's a Unix timestamp (seconds) - calculate minute from it
+                        const kickoffTime = rawValue * 1000; // Convert to milliseconds
+                        const now = Date.now();
+                        const elapsedMs = now - kickoffTime;
+                        parsedMinute = Math.floor(elapsedMs / 60000);
+                        console.log(`[WS] Timestamp mode: kickoff=${kickoffTime}, now=${now}, elapsed=${elapsedMs}ms, minute=${parsedMinute}`);
+                    } else {
+                        // It's a direct minute value
+                        parsedMinute = rawValue;
+                    }
+                } else if (typeof rawValue === 'string') {
+                    // Handle formats like "45+2" -> 47, or just "67" -> 67
+                    const str = rawValue;
+                    if (str.includes('+')) {
+                        const parts = str.split('+');
+                        parsedMinute = parseInt(parts[0], 10) + parseInt(parts[1], 10);
+                    } else {
+                        parsedMinute = parseInt(str, 10);
+                    }
+                    if (isNaN(parsedMinute)) parsedMinute = null;
                 }
-                if (isNaN(parsedMinute)) parsedMinute = null;
+
+                // Adjust minute based on match status
+                // Status 5/6 = second half, add 45 if minute < 46
+                // Status 7 = extra time, add 90 if minute < 91
+                if (parsedMinute !== null && parsedMinute >= 0) {
+                    if ((statusId === 5 || statusId === 6) && parsedMinute < 46) {
+                        minute = parsedMinute + 45;
+                    } else if (statusId === 7 && parsedMinute < 91) {
+                        minute = parsedMinute + 90;
+                    } else {
+                        minute = parsedMinute;
+                    }
+                }
             }
 
-            // CRITICAL: Adjust minute based on match status
-            // According to TheSports docs, minute resets for each half!
-            // Status 5/6 = second half, so add 45
-            // Status 7 = extra time, so add 90
-            if (parsedMinute !== null) {
-                if (statusId === 5 || statusId === 6) {
-                    // Second half - add 45 to get actual match minute
-                    minute = parsedMinute + 45;
-                } else if (statusId === 7) {
-                    // Extra time - add 90
-                    minute = parsedMinute + 90;
-                } else {
-                    // First half (1,2) or other - use as is
-                    minute = parsedMinute;
-                }
-            } else {
-                minute = null;
-            }
-
-            // Log detailed info for debugging
-            console.log(`[WS] Match ${data.id}: statusId=${statusId}, rawMinute=${JSON.stringify(rawMinute)}, adjustedMinute=${minute}`);
+            console.log(`[WS] Match ${data.id}: statusId=${statusId}, rawValue=${JSON.stringify(rawValue)}, finalMinute=${minute}`);
         } else {
             // Fallback to flat format
             statusId = data.status_id ?? 1;
