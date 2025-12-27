@@ -1,6 +1,6 @@
 /**
  * Simplified Sync Service
- * Uses Cache Service to get team names - NO JOINs needed!
+ * Uses /match/recent/list API (recommended) + Cache Service for team names
  */
 
 import { supabase } from '@/lib/supabase';
@@ -87,7 +87,6 @@ interface LiveMatchScore {
 
 /**
  * Sync live match STATUS only (score, minute, status)
- * Does NOT create new matches or update team names
  */
 export async function syncLiveMatches(): Promise<{ synced: number; errors: number }> {
     let synced = 0;
@@ -117,7 +116,6 @@ export async function syncLiveMatches(): Promise<{ synced: number; errors: numbe
             const status = STATUS_MAP[statusId] || 'live';
             const minute = calculateMinute(rawMinute, statusId);
 
-            // UPDATE existing match only
             const { error } = await supabase
                 .from('matches')
                 .update({
@@ -140,7 +138,7 @@ export async function syncLiveMatches(): Promise<{ synced: number; errors: numbe
     return { synced, errors };
 }
 
-interface DiaryMatch {
+interface RecentMatch {
     id: string;
     home_team_id?: string;
     away_team_id?: string;
@@ -152,7 +150,8 @@ interface DiaryMatch {
 }
 
 /**
- * DAILY SYNC: Creates/updates matches WITH team names from Cache
+ * DAILY SYNC: Fetches from /match/recent/list (recommended API)
+ * This API has ALL matches including Premier League!
  */
 export async function syncDailyMatches(date: string): Promise<{ synced: number; errors: number }> {
     let synced = 0;
@@ -160,30 +159,54 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
 
     console.log(`[Sync] Starting daily sync for ${date}`);
 
-    // 1. Load caches first! This is the key step.
+    // 1. Load caches first
     console.log('[Sync] Loading team/competition caches...');
     await ensureCachesLoaded();
 
     const stats = getCacheStats();
-    console.log(`[Sync] Cache stats: ${stats.teams} teams, ${stats.competitions} competitions`);
+    console.log(`[Sync] Cache stats: ${stats.teams} teams, ${stats.competitions} competitions, ${stats.countries} countries`);
 
-    // 2. Fetch matches for the date
-    const apiDate = date.replace(/-/g, '');
-    console.log(`[Sync] Fetching diary matches for ${apiDate}...`);
+    // 2. Calculate date range for filtering
+    const dateStart = new Date(`${date}T00:00:00Z`).getTime() / 1000;
+    const dateEnd = new Date(`${date}T23:59:59Z`).getTime() / 1000;
 
-    const diaryMatches = await fetchFromApi<DiaryMatch[]>('/v1/football/match/diary', { date: apiDate });
+    console.log(`[Sync] Fetching matches from /match/recent/list for ${date}...`);
 
-    if (!diaryMatches || !Array.isArray(diaryMatches) || diaryMatches.length === 0) {
-        console.log('[Sync] No diary matches found');
+    // 3. Fetch from /match/recent/list with pagination (has ALL matches!)
+    const allMatches: RecentMatch[] = [];
+    const maxPages = 10; // Limit to prevent infinite loops
+
+    for (let page = 1; page <= maxPages; page++) {
+        const pageMatches = await fetchFromApi<RecentMatch[]>('/v1/football/match/recent/list', { page: String(page) });
+
+        if (!pageMatches || !Array.isArray(pageMatches) || pageMatches.length === 0) {
+            console.log(`[Sync] Page ${page}: No more matches`);
+            break;
+        }
+
+        // Filter by date
+        const matchesOnDate = pageMatches.filter(m => {
+            if (!m.match_time) return false;
+            return m.match_time >= dateStart && m.match_time <= dateEnd;
+        });
+
+        console.log(`[Sync] Page ${page}: ${matchesOnDate.length} matches for ${date}`);
+        allMatches.push(...matchesOnDate);
+
+        // If we got less than 1000, we're at the end
+        if (pageMatches.length < 1000) break;
+    }
+
+    console.log(`[Sync] Total matches found for ${date}: ${allMatches.length}`);
+
+    if (allMatches.length === 0) {
+        console.log('[Sync] No matches found for this date');
         return { synced: 0, errors: 0 };
     }
 
-    console.log(`[Sync] Found ${diaryMatches.length} diary matches`);
-
-    // 3. Upsert matches with team names from cache
-    for (const match of diaryMatches) {
+    // 4. Upsert matches with team names from cache
+    for (const match of allMatches) {
         try {
-            // Get team and competition data from CACHE
             const homeTeam = getTeamById(match.home_team_id || '');
             const awayTeam = getTeamById(match.away_team_id || '');
             const comp = getCompetitionById(match.competition_id || '');
@@ -215,7 +238,7 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
             }, { onConflict: 'id' });
 
             if (error) {
-                if (synced < 3) console.error(`[Sync] Match ${match.id} error:`, error.message);
+                if (errors < 3) console.error(`[Sync] Match ${match.id} error:`, error.message);
                 errors++;
             } else {
                 synced++;
@@ -227,7 +250,7 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
 
     console.log(`[Sync] Daily sync complete: ${synced} matches synced, ${errors} errors`);
 
-    // 4. Update live scores
+    // 5. Update live scores
     const liveResult = await syncLiveMatches();
     console.log(`[Sync] Live update: ${liveResult.synced} updated`);
 
