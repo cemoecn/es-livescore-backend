@@ -181,30 +181,25 @@ async function handleMatchUpdate(data: any) {
 
         console.log(`[WS] Match ${data.id}: ${status}, score=${homeScore}-${awayScore}, minute=${minute}`);
 
-        // Use UPSERT (insert with onConflict) to handle both new and existing matches
-        const { error } = await supabase
+        // Use UPDATE (not UPSERT) - only update existing matches
+        // New matches with full team data come from the daily CRON sync
+        // WebSocket only updates: status, minute, score, updated_at
+        const { error, count } = await supabase
             .from('matches')
-            .upsert(
-                {
-                    id: data.id,
-                    status: status,
-                    minute: minute,
-                    home_score: homeScore,
-                    away_score: awayScore,
-                    home_team_id: data.home_team_id || null,
-                    away_team_id: data.away_team_id || null,
-                    competition_id: data.competition_id || null,
-                    start_time: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                },
-                {
-                    onConflict: 'id',
-                    ignoreDuplicates: false,
-                }
-            );
+            .update({
+                status: status,
+                minute: minute,
+                home_score: homeScore,
+                away_score: awayScore,
+                updated_at: new Date().toISOString(),
+            })
+            .eq('id', data.id);
 
         if (error) {
-            console.error('[WS] Match upsert error:', error.message);
+            console.error('[WS] Match update error:', error.message);
+        } else if (count === 0) {
+            // Match doesn't exist yet - it will be created by daily sync
+            console.log(`[WS] Match ${data.id}: Not in DB yet, waiting for daily sync`);
         }
     } catch (error) {
         console.error('[WS] Error handling match update:', error);
