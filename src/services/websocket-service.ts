@@ -70,33 +70,60 @@ const STATUS_MAP: Record<number, string> = {
 /**
  * Handle incoming match update
  * Uses UPSERT to prevent race conditions and duplicate key errors
+ * 
+ * TheSports WebSocket sends data in this format:
+ * { id, score: [matchId, statusId, homeScores[], awayScores[], minute, extra], stats, incidents, tlive }
  */
-async function handleMatchUpdate(data: MqttMatchUpdate) {
+async function handleMatchUpdate(data: any) {
     try {
-        const status = STATUS_MAP[data.status_id || 0] || 'unknown';
+        // Parse the score array if present
+        // Format: [matchId, statusId, homeScores[], awayScores[], minute, extra]
+        const scoreData = data.score;
 
-        console.log(`[WS] Match ${data.id}: ${status}, score=${data.home_score || 0}-${data.away_score || 0}`);
+        let statusId: number;
+        let homeScore: number;
+        let awayScore: number;
+        let minute: number | null;
+
+        if (Array.isArray(scoreData) && scoreData.length >= 5) {
+            // New format with score array
+            statusId = scoreData[1] ?? 1;
+            const homeScores = scoreData[2];
+            const awayScores = scoreData[3];
+            homeScore = Array.isArray(homeScores) ? (homeScores[0] || 0) : (homeScores || 0);
+            awayScore = Array.isArray(awayScores) ? (awayScores[0] || 0) : (awayScores || 0);
+            minute = scoreData[4] ?? null;
+        } else {
+            // Fallback to flat format
+            statusId = data.status_id ?? 1;
+            homeScore = data.home_score ?? 0;
+            awayScore = data.away_score ?? 0;
+            minute = data.minute ?? null;
+        }
+
+        const status = STATUS_MAP[statusId] || 'unknown';
+
+        console.log(`[WS] Match ${data.id}: ${status}, score=${homeScore}-${awayScore}, minute=${minute}`);
 
         // Use UPSERT (insert with onConflict) to handle both new and existing matches
-        // This is atomic and prevents race conditions with duplicate key errors
         const { error } = await supabase
             .from('matches')
             .upsert(
                 {
                     id: data.id,
                     status: status,
-                    minute: data.minute || null,
-                    home_score: data.home_score || 0,
-                    away_score: data.away_score || 0,
+                    minute: minute,
+                    home_score: homeScore,
+                    away_score: awayScore,
                     home_team_id: data.home_team_id || null,
                     away_team_id: data.away_team_id || null,
                     competition_id: data.competition_id || null,
-                    start_time: new Date().toISOString(), // Will be ignored on update due to ignoreDuplicates being false
+                    start_time: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
                 },
                 {
                     onConflict: 'id',
-                    ignoreDuplicates: false, // Update the row if it exists
+                    ignoreDuplicates: false,
                 }
             );
 
