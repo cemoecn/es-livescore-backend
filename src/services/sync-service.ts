@@ -4,7 +4,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
-import { ensureCachesLoaded, getTeamById, getCompetitionById, getCacheStats } from './cache';
+import { ensureCachesLoaded, getCacheStats, getCompetitionById, getCountryById, getTeamById } from './cache';
 
 const API_URL = process.env.THESPORTS_API_URL || 'https://api.thesports.com';
 const API_KEY = process.env.THESPORTS_API_KEY || '';
@@ -66,7 +66,7 @@ async function fetchFromApi<T>(endpoint: string, params: Record<string, string> 
  */
 function calculateMinute(rawMinute: number | string | undefined, statusId: number): number | null {
     if (rawMinute === undefined || rawMinute === null) return null;
-    
+
     let minute = typeof rawMinute === 'string' ? parseInt(rawMinute, 10) : rawMinute;
     if (isNaN(minute)) return null;
 
@@ -94,7 +94,7 @@ export async function syncLiveMatches(): Promise<{ synced: number; errors: numbe
     let errors = 0;
 
     console.log('[Sync] Fetching live matches...');
-    
+
     const matches = await fetchFromApi<LiveMatchScore[]>('/v1/football/match/detail_live');
 
     if (!matches || !Array.isArray(matches) || matches.length === 0) {
@@ -108,12 +108,12 @@ export async function syncLiveMatches(): Promise<{ synced: number; errors: numbe
         try {
             const score = match.score;
             if (!score || !Array.isArray(score)) continue;
-            
+
             const statusId = score[1] ?? 1;
             const homeScores = score[2] ?? [0];
             const awayScores = score[3] ?? [0];
             const rawMinute = score[4];
-            
+
             const status = STATUS_MAP[statusId] || 'live';
             const minute = calculateMinute(rawMinute, statusId);
 
@@ -159,25 +159,25 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
     let errors = 0;
 
     console.log(`[Sync] Starting daily sync for ${date}`);
-    
+
     // 1. Load caches first! This is the key step.
     console.log('[Sync] Loading team/competition caches...');
     await ensureCachesLoaded();
-    
+
     const stats = getCacheStats();
     console.log(`[Sync] Cache stats: ${stats.teams} teams, ${stats.competitions} competitions`);
-    
+
     // 2. Fetch matches for the date
     const apiDate = date.replace(/-/g, '');
     console.log(`[Sync] Fetching diary matches for ${apiDate}...`);
-    
+
     const diaryMatches = await fetchFromApi<DiaryMatch[]>('/v1/football/match/diary', { date: apiDate });
 
     if (!diaryMatches || !Array.isArray(diaryMatches) || diaryMatches.length === 0) {
         console.log('[Sync] No diary matches found');
         return { synced: 0, errors: 0 };
     }
-    
+
     console.log(`[Sync] Found ${diaryMatches.length} diary matches`);
 
     // 3. Upsert matches with team names from cache
@@ -187,7 +187,8 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
             const homeTeam = getTeamById(match.home_team_id || '');
             const awayTeam = getTeamById(match.away_team_id || '');
             const comp = getCompetitionById(match.competition_id || '');
-            
+            const country = comp?.country_id ? getCountryById(comp.country_id) : undefined;
+
             const statusId = match.status_id ?? 0;
             const status = STATUS_MAP[statusId] || 'scheduled';
 
@@ -200,7 +201,7 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
                 away_team_logo: awayTeam?.logo || '',
                 competition_name: comp?.short_name || comp?.name || 'Unknown',
                 competition_logo: comp?.logo || '',
-                competition_country: comp?.country_id || '',
+                competition_country: country?.name || '',
                 // IDs for reference
                 home_team_id: match.home_team_id || null,
                 away_team_id: match.away_team_id || null,
@@ -225,7 +226,7 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
     }
 
     console.log(`[Sync] Daily sync complete: ${synced} matches synced, ${errors} errors`);
-    
+
     // 4. Update live scores
     const liveResult = await syncLiveMatches();
     console.log(`[Sync] Live update: ${liveResult.synced} updated`);
@@ -237,10 +238,10 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
  * WebSocket update - ONLY updates score/minute/status
  */
 export async function updateMatchLive(
-    matchId: string, 
-    status: string, 
-    minute: number | null, 
-    homeScore: number, 
+    matchId: string,
+    status: string,
+    minute: number | null,
+    homeScore: number,
     awayScore: number
 ): Promise<void> {
     const { error } = await supabase
