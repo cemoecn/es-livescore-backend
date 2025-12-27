@@ -171,11 +171,10 @@ async function handleMatchUpdate(data: any) {
 
             console.log(`[WS] Match ${data.id}: statusId=${statusId}, rawValue=${JSON.stringify(rawValue)}, finalMinute=${minute}`);
         } else {
-            // Fallback to flat format
-            statusId = data.status_id ?? 1;
-            homeScore = data.home_score ?? 0;
-            awayScore = data.away_score ?? 0;
-            minute = data.minute ?? null;
+            // No score array - skip this update to avoid overwriting valid data
+            // The API sometimes sends updates without the score array
+            console.log(`[WS] Match ${data.id}: No score array, skipping update`);
+            return; // DON'T update the database with incomplete data
         }
 
         const status = STATUS_MAP[statusId] || 'unknown';
