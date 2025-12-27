@@ -73,6 +73,16 @@ const STATUS_MAP: Record<number, string> = {
  * 
  * TheSports WebSocket sends data in this format:
  * { id, score: [matchId, statusId, homeScores[], awayScores[], minute, extra], stats, incidents, tlive }
+ * 
+ * Status IDs:
+ * 1 = First half
+ * 2 = First half (injury time)
+ * 3 = Half-time break
+ * 4 = Half-time (interval)
+ * 5 = Second half
+ * 6 = Second half (injury time)
+ * 7 = Extra time
+ * 8 = Finished
  */
 async function handleMatchUpdate(data: any) {
     try {
@@ -92,7 +102,26 @@ async function handleMatchUpdate(data: any) {
             const awayScores = scoreData[3];
             homeScore = Array.isArray(homeScores) ? (homeScores[0] || 0) : (homeScores || 0);
             awayScore = Array.isArray(awayScores) ? (awayScores[0] || 0) : (awayScores || 0);
-            minute = scoreData[4] ?? null;
+
+            // Parse minute - can be number, string, or string like "45+2"
+            const rawMinute = scoreData[4];
+            if (typeof rawMinute === 'number') {
+                minute = rawMinute;
+            } else if (typeof rawMinute === 'string') {
+                // Handle formats like "45+2" -> 47, or just "67" -> 67
+                if (rawMinute.includes('+')) {
+                    const parts = rawMinute.split('+');
+                    minute = parseInt(parts[0], 10) + parseInt(parts[1], 10);
+                } else {
+                    minute = parseInt(rawMinute, 10);
+                }
+                if (isNaN(minute)) minute = null;
+            } else {
+                minute = null;
+            }
+
+            // Log detailed info for debugging
+            console.log(`[WS] Match ${data.id}: statusId=${statusId}, rawMinute=${JSON.stringify(rawMinute)}, parsedMinute=${minute}`);
         } else {
             // Fallback to flat format
             statusId = data.status_id ?? 1;
