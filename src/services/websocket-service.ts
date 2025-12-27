@@ -141,14 +141,25 @@ async function handleMatchUpdate(data: any) {
                 }
 
                 // Adjust minute based on match status
-                // Status 5/6 = second half, add 45 if minute < 46
-                // Status 7 = extra time, add 90 if minute < 91
+                // Status 3/4 = halftime, minute should be null
+                // Status 5/6 = second half, add 45 (timestamp is 2nd half kickoff)
+                // Status 7 = extra time, add 90
+                // Status 8 = finished
                 if (parsedMinute !== null && parsedMinute >= 0) {
-                    if ((statusId === 5 || statusId === 6) && parsedMinute < 46) {
+                    if (statusId === 3 || statusId === 4) {
+                        // Halftime - don't show a minute, use null
+                        minute = null;
+                    } else if (statusId === 5 || statusId === 6) {
+                        // Second half - add 45 since kickoff timestamp is for 2nd half
                         minute = parsedMinute + 45;
-                    } else if (statusId === 7 && parsedMinute < 91) {
+                    } else if (statusId === 7) {
+                        // Extra time - add 90
                         minute = parsedMinute + 90;
+                    } else if (statusId === 8) {
+                        // Finished - don't need minute
+                        minute = null;
                     } else {
+                        // First half (1,2) or scheduled (0) - use as is
                         minute = parsedMinute;
                     }
                 }
