@@ -28,6 +28,29 @@ const STATUS_MAP: Record<number, string> = {
     13: 'suspended',
 };
 
+// TOP 10 LEAGUES - Only sync these competitions
+const TOP_LEAGUE_IDS = new Set([
+    // England
+    'jednm9whz0ryox8', // Premier League
+    '9k82rekh14repzj', // Championship
+    // Germany
+    'z318q66h5zeqo9j', // Bundesliga
+    // Spain  
+    'vl7oqdehlyr510j', // La Liga
+    // Italy
+    '4zp5rzghp5q82w1', // Serie A
+    // France
+    'kjw2r09hzerz84o', // Ligue 1
+    // Netherlands
+    'vl7oqdeheyr510j', // Eredivisie
+    // Portugal
+    'z318q66helwqo9j', // Primeira Liga
+    // UEFA
+    'z8yomo4h7wq0j6l', // Champions League
+    '56ypq3nh0xmd7oj', // Europa League
+    'l965mkyhrw1r1ge', // Conference League
+]);
+
 /**
  * Fetch from TheSports API
  */
@@ -185,9 +208,10 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
             break;
         }
 
-        // Filter by date
+        // Filter by date AND top leagues only
         const matchesOnDate = pageMatches.filter(m => {
             if (!m.match_time) return false;
+            if (!m.competition_id || !TOP_LEAGUE_IDS.has(m.competition_id)) return false;
             return m.match_time >= dateStart && m.match_time <= dateEnd;
         });
 
