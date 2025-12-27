@@ -76,22 +76,49 @@ async function handleMatchUpdate(data: MqttMatchUpdate) {
 
         console.log(`[WS] Match ${data.id}: ${status}, score=${data.home_score || 0}-${data.away_score || 0}`);
 
-        const { error } = await supabase
+        // First try to update existing match (most common case for live updates)
+        const { data: existingMatch } = await supabase
             .from('matches')
-            .upsert({
-                id: data.id,
-                status: status,
-                minute: data.minute || null,
-                home_score: data.home_score || 0,
-                away_score: data.away_score || 0,
-                home_team_id: data.home_team_id || null,
-                away_team_id: data.away_team_id || null,
-                competition_id: data.competition_id || null,
-                updated_at: new Date().toISOString(),
-            }, { onConflict: 'id' });
+            .select('id')
+            .eq('id', data.id)
+            .single();
 
-        if (error) {
-            console.error('[WS] Match upsert error:', error.message);
+        if (existingMatch) {
+            // Update existing match
+            const { error } = await supabase
+                .from('matches')
+                .update({
+                    status: status,
+                    minute: data.minute || null,
+                    home_score: data.home_score || 0,
+                    away_score: data.away_score || 0,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', data.id);
+
+            if (error) {
+                console.error('[WS] Match update error:', error.message);
+            }
+        } else {
+            // Insert new match with required start_time
+            const { error } = await supabase
+                .from('matches')
+                .insert({
+                    id: data.id,
+                    status: status,
+                    minute: data.minute || null,
+                    home_score: data.home_score || 0,
+                    away_score: data.away_score || 0,
+                    home_team_id: data.home_team_id || null,
+                    away_team_id: data.away_team_id || null,
+                    competition_id: data.competition_id || null,
+                    start_time: new Date().toISOString(), // Required field
+                    updated_at: new Date().toISOString(),
+                });
+
+            if (error) {
+                console.error('[WS] Match insert error:', error.message);
+            }
         }
     } catch (error) {
         console.error('[WS] Error handling match update:', error);
