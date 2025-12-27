@@ -222,16 +222,21 @@ export async function syncLiveMatches(): Promise<{ synced: number; errors: numbe
 }
 
 /**
- * Sync daily matches from diary endpoint
+ * Sync recent matches from recent/list endpoint
+ * This endpoint includes team and competition data
  */
 export async function syncDailyMatches(date: string): Promise<{ synced: number; errors: number }> {
     let synced = 0;
     let errors = 0;
 
-    const matches = await fetchFromApi<ApiMatch[]>('/v1/football/match/diary', { date });
+    // Use recent/list which has team data instead of diary which may be empty
+    const matches = await fetchFromApi<ApiMatch[]>('/v1/football/match/recent/list');
     if (!matches || !Array.isArray(matches)) {
+        console.log('No matches from recent/list, trying date endpoint...');
         return { synced: 0, errors: 1 };
     }
+
+    console.log(`Processing ${matches.length} matches from recent/list for team/competition data`);
 
     // Collect unique teams and competitions for upsert
     const teams = new Map<string, { id: string; name: string; short_name?: string; logo?: string; country_id?: string }>();
