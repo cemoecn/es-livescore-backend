@@ -80,6 +80,31 @@ export async function GET(request: NextRequest) {
         results['detail_live_stats'] = { error: e instanceof Error ? e.message : 'Unknown error' };
     }
 
+    // Test 4: Check /match/diary for today to compare IDs
+    try {
+        const today = new Date().toISOString().split('T')[0].replace(/-/g, ''); // YYYYMMDD
+        const diaryUrl = `${API_URL}/v1/football/match/diary?user=${USERNAME}&secret=${API_KEY}&date=${today}`;
+        const diaryResponse = await fetch(diaryUrl, {
+            headers: { 'Accept': 'application/json' },
+        });
+        const diaryData = await diaryResponse.json();
+
+        // Find sample matches from diary
+        const diaryMatches = Array.isArray(diaryData.results) ? diaryData.results.slice(0, 5) : [];
+
+        results['diary_comparison'] = {
+            date: today,
+            sampleMatchIds: diaryMatches.map((m: any) => ({
+                id: m.id,
+                homeTeamId: m.home_team_id,
+            })),
+            totalMatches: Array.isArray(diaryData.results) ? diaryData.results.length : 0,
+            note: 'These IDs from /diary should match what we store in Supabase',
+        };
+    } catch (e) {
+        results['diary_comparison'] = { error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+
     return NextResponse.json({
         success: true,
         matchId,
