@@ -10,22 +10,22 @@ const API_URL = process.env.THESPORTS_API_URL || 'https://api.thesports.com';
 const API_KEY = process.env.THESPORTS_API_KEY || '';
 const USERNAME = process.env.THESPORTS_USERNAME || '';
 
-// Status mapping from TheSports API
+// Status mapping from TheSports API (based on official documentation)
 const STATUS_MAP: Record<number, string> = {
-    0: 'scheduled',
-    1: 'live',      // First half
-    2: 'live',      // First half injury time
-    3: 'live',      // First half extra
-    4: 'halftime',  // Half-time
-    5: 'live',      // Second half
-    6: 'live',      // Second half injury time
-    7: 'live',      // Extra time
-    8: 'finished',  // Full time
-    9: 'finished',  // After extra time
-    10: 'postponed',
-    11: 'cancelled',
-    12: 'interrupted',
-    13: 'suspended',
+    0: 'cancelled',   // Abnormal (suggest hiding)
+    1: 'scheduled',   // Not started
+    2: 'live',        // First half
+    3: 'halftime',    // Half-time
+    4: 'live',        // Second half
+    5: 'live',        // Overtime
+    6: 'live',        // Overtime (deprecated)
+    7: 'live',        // Penalty Shoot-out
+    8: 'finished',    // End
+    9: 'postponed',   // Delay
+    10: 'suspended',  // Interrupt
+    11: 'suspended',  // Cut in half
+    12: 'cancelled',  // Cancel
+    13: 'scheduled',  // To be determined
 };
 
 // TOP 10 LEAGUES - Only sync these competitions
