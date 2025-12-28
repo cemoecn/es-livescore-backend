@@ -161,7 +161,7 @@ export async function syncLiveMatches(): Promise<{ synced: number; errors: numbe
     return { synced, errors };
 }
 
-interface RecentMatch {
+interface DiaryMatch {
     id: string;
     home_team_id?: string;
     away_team_id?: string;
@@ -173,8 +173,8 @@ interface RecentMatch {
 }
 
 /**
- * DAILY SYNC: Fetches from /match/recent/list (recommended API)
- * This API has ALL matches including Premier League!
+ * DAILY SYNC: Fetches from /match/diary API
+ * Uses date parameter (YYYYMMDD format) for direct date query - much faster!
  */
 export async function syncDailyMatches(date: string): Promise<{ synced: number; errors: number }> {
     let synced = 0;
@@ -187,51 +187,34 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
     await ensureCachesLoaded();
 
     const stats = getCacheStats();
-    console.log(`[Sync] Cache stats: ${stats.teams} teams, ${stats.competitions} competitions, ${stats.countries} countries`);
+    console.log(`[Sync] Cache stats: ${stats.teams} teams, ${stats.competitions} competitions`);
 
-    // 2. Calculate date range for filtering
-    const dateStart = new Date(`${date}T00:00:00Z`).getTime() / 1000;
-    const dateEnd = new Date(`${date}T23:59:59Z`).getTime() / 1000;
+    // 2. Fetch from /match/diary with date parameter (YYYYMMDD format)
+    const apiDate = date.replace(/-/g, ''); // Convert 2025-12-28 to 20251228
+    console.log(`[Sync] Fetching matches from /match/diary for ${apiDate}...`);
 
-    console.log(`[Sync] Fetching matches from /match/recent/list for ${date}...`);
+    const diaryMatches = await fetchFromApi<DiaryMatch[]>('/v1/football/match/diary', { date: apiDate });
 
-    // 3. Fetch from /match/recent/list with pagination (has ALL matches!)
-    const allMatches: RecentMatch[] = [];
-    const maxPages = 50; // Check up to 50 pages to find all top league matches
-
-    for (let page = 1; page <= maxPages; page++) {
-        const pageMatches = await fetchFromApi<RecentMatch[]>('/v1/football/match/recent/list', { page: String(page) });
-
-        if (!pageMatches || !Array.isArray(pageMatches) || pageMatches.length === 0) {
-            console.log(`[Sync] Page ${page}: No more matches`);
-            break;
-        }
-
-        // Filter by date AND top leagues only
-        const matchesOnDate = pageMatches.filter(m => {
-            if (!m.match_time) return false;
-            if (!m.competition_id || !TOP_LEAGUE_IDS.has(m.competition_id)) return false;
-            return m.match_time >= dateStart && m.match_time <= dateEnd;
-        });
-
-        if (matchesOnDate.length > 0) {
-            console.log(`[Sync] Page ${page}: ${matchesOnDate.length} matches for ${date}`);
-            allMatches.push(...matchesOnDate);
-        }
-
-        // Only stop if no matches returned at all (empty page)
-        if (pageMatches.length === 0) break;
+    if (!diaryMatches || !Array.isArray(diaryMatches) || diaryMatches.length === 0) {
+        console.log('[Sync] No diary matches found');
+        return { synced: 0, errors: 0 };
     }
 
-    console.log(`[Sync] Total matches found for ${date}: ${allMatches.length}`);
+    console.log(`[Sync] Found ${diaryMatches.length} total matches for ${date}`);
 
-    if (allMatches.length === 0) {
-        console.log('[Sync] No matches found for this date');
+    // 3. Filter by TOP_LEAGUE_IDS
+    const topLeagueMatches = diaryMatches.filter(m =>
+        m.competition_id && TOP_LEAGUE_IDS.has(m.competition_id)
+    );
+
+    console.log(`[Sync] Filtered to ${topLeagueMatches.length} top league matches`);
+
+    if (topLeagueMatches.length === 0) {
         return { synced: 0, errors: 0 };
     }
 
     // 4. Upsert matches with team names from cache
-    for (const match of allMatches) {
+    for (const match of topLeagueMatches) {
         try {
             const homeTeam = getTeamById(match.home_team_id || '');
             const awayTeam = getTeamById(match.away_team_id || '');
@@ -243,7 +226,6 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
 
             const { error } = await supabase.from('matches').upsert({
                 id: match.id,
-                // DENORMALIZED team names from cache!
                 home_team_name: homeTeam?.name || 'TBD',
                 home_team_logo: homeTeam?.logo || '',
                 away_team_name: awayTeam?.name || 'TBD',
@@ -251,11 +233,9 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
                 competition_name: comp?.short_name || comp?.name || 'Unknown',
                 competition_logo: comp?.logo || '',
                 competition_country: country?.name || '',
-                // IDs for reference
                 home_team_id: match.home_team_id || null,
                 away_team_id: match.away_team_id || null,
                 competition_id: match.competition_id || null,
-                // Match data
                 status: status,
                 home_score: match.home_scores?.[0] || 0,
                 away_score: match.away_scores?.[0] || 0,
@@ -281,6 +261,31 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
     console.log(`[Sync] Live update: ${liveResult.synced} updated`);
 
     return { synced, errors };
+}
+
+/**
+ * SYNC ALL DAYS: Syncs last 7 days + today + next 7 days (15 days total)
+ */
+export async function syncAllDays(): Promise<{ totalSynced: number; totalErrors: number; days: number }> {
+    console.log('[Sync] Starting 15-day sync...');
+
+    let totalSynced = 0;
+    let totalErrors = 0;
+    const today = new Date();
+
+    // Sync -7 to +7 days (15 days total)
+    for (let offset = -7; offset <= 7; offset++) {
+        const date = new Date(today);
+        date.setDate(date.getDate() + offset);
+        const dateStr = date.toISOString().split('T')[0];
+
+        const result = await syncDailyMatches(dateStr);
+        totalSynced += result.synced;
+        totalErrors += result.errors;
+    }
+
+    console.log(`[Sync] 15-day sync complete: ${totalSynced} matches, ${totalErrors} errors`);
+    return { totalSynced, totalErrors, days: 15 };
 }
 
 /**
@@ -312,6 +317,7 @@ export async function updateMatchLive(
 export const SyncService = {
     syncLiveMatches,
     syncDailyMatches,
+    syncAllDays,
     updateMatchLive,
 };
 
