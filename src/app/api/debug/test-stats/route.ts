@@ -56,9 +56,28 @@ export async function GET(request: NextRequest) {
             rawData: detailData.data,
             dataType: typeof detailData.data,
             isArray: Array.isArray(detailData.data),
+            fullResponse: detailData, // Show full response structure
         };
     } catch (e) {
         results['team_stats_detail'] = { error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+
+    // Test 3: Check the stats from detail_live endpoint 
+    try {
+        const liveUrl = `${API_URL}/v1/football/match/detail_live?user=${USERNAME}&secret=${API_KEY}&id=${matchId}`;
+        const liveResponse = await fetch(liveUrl, {
+            headers: { 'Accept': 'application/json' },
+        });
+        const liveData = await liveResponse.json();
+
+        results['detail_live_stats'] = {
+            hasData: !!liveData.data,
+            hasStats: liveData.data?.stats ? true : false,
+            statsData: liveData.data?.stats || null,
+            matchFound: !!liveData.data,
+        };
+    } catch (e) {
+        results['detail_live_stats'] = { error: e instanceof Error ? e.message : 'Unknown error' };
     }
 
     return NextResponse.json({
