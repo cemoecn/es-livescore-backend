@@ -32,19 +32,19 @@ const STATUS_MAP: Record<number, string> = {
 const TOP_LEAGUE_IDS = new Set([
     // England
     'jednm9whz0ryox8', // Premier League
-    '9k82rekh14repzj', // Championship
+    'l965mkyh32r1ge4', // Championship (corrected)
     // Germany
-    'z318q66h5zeqo9j', // Bundesliga
+    'gy0or5jhg6qwzv3', // Bundesliga (corrected)
     // Spain  
     'vl7oqdehlyr510j', // La Liga
     // Italy
     '4zp5rzghp5q82w1', // Serie A
     // France
-    'kjw2r09hzerz84o', // Ligue 1
+    'yl5ergphnzr8k0o', // Ligue 1 (corrected)
     // Netherlands
     'vl7oqdeheyr510j', // Eredivisie
     // Portugal
-    'z318q66helwqo9j', // Primeira Liga
+    '9vjxm8ghx2r6odg', // Primeira Liga (corrected)
     // UEFA
     'z8yomo4h7wq0j6l', // Champions League
     '56ypq3nh0xmd7oj', // Europa League
