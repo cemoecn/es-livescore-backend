@@ -58,11 +58,12 @@ export async function GET(request: NextRequest) {
             page,
             totalCompetitions: competitions.length,
             topLeaguesFound: topLeagues.length,
-            topLeagues: topLeagues.map((c: { id: string; name: string; short_name?: string; country_id?: string }) => ({
+            topLeagues: topLeagues.map((c: { id: string; name: string; short_name?: string; country_id?: string; logo?: string }) => ({
                 id: c.id,
                 name: c.name,
                 shortName: c.short_name,
                 countryId: c.country_id,
+                logo: c.logo,
             })),
         });
     } catch (error) {
