@@ -222,7 +222,13 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
             const country = comp?.country_id ? getCountryById(comp.country_id) : undefined;
 
             const statusId = match.status_id ?? 0;
-            const status = STATUS_MAP[statusId] || 'scheduled';
+            let status = STATUS_MAP[statusId] || 'scheduled';
+
+            // IMPORTANT: If match hasn't started yet (match_time > now), force status to 'scheduled'
+            const now = Math.floor(Date.now() / 1000);
+            if (match.match_time && match.match_time > now) {
+                status = 'scheduled';
+            }
 
             const { error } = await supabase.from('matches').upsert({
                 id: match.id,
