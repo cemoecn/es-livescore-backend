@@ -120,14 +120,30 @@ async function handleMatchUpdate(data: any) {
 
                 if (typeof rawValue === 'number') {
                     if (rawValue > 1000000000) {
-                        // It's a Unix timestamp (seconds) - calculate minute from it
-                        const kickoffTime = rawValue * 1000; // Convert to milliseconds
-                        const now = Date.now();
-                        const elapsedMs = now - kickoffTime;
-                        parsedMinute = Math.floor(elapsedMs / 60000);
-                        console.log(`[WS] Timestamp mode: kickoff=${kickoffTime}, now=${now}, elapsed=${elapsedMs}ms, minute=${parsedMinute}`);
+                        // It's a Unix timestamp (seconds) - calculate minute using official formula
+                        // First half: minute = (now - kickoff) / 60 + 1
+                        // Second half: minute = (now - kickoff) / 60 + 45 + 1
+                        const kickoffTimestamp = rawValue; // Unix seconds
+                        const nowTimestamp = Math.floor(Date.now() / 1000); // Current time in Unix seconds
+                        const elapsedSeconds = nowTimestamp - kickoffTimestamp;
+                        const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+
+                        // Apply formula based on status
+                        if (statusId === 2) {
+                            // First half: +1 as per formula
+                            parsedMinute = elapsedMinutes + 1;
+                        } else if (statusId === 4) {
+                            // Second half: +45 +1 as per formula
+                            parsedMinute = elapsedMinutes + 45 + 1;
+                        } else if (statusId === 5 || statusId === 6) {
+                            // Overtime: +90 +1
+                            parsedMinute = elapsedMinutes + 90 + 1;
+                        } else {
+                            parsedMinute = elapsedMinutes + 1;
+                        }
+                        console.log(`[WS] Timestamp mode: kickoff=${kickoffTimestamp}, now=${nowTimestamp}, elapsed=${elapsedSeconds}s, minute=${parsedMinute}`);
                     } else {
-                        // It's a direct minute value
+                        // It's a direct minute value - use as is
                         parsedMinute = rawValue;
                     }
                 } else if (typeof rawValue === 'string') {
@@ -142,29 +158,27 @@ async function handleMatchUpdate(data: any) {
                     if (isNaN(parsedMinute)) parsedMinute = null;
                 }
 
-                // Adjust minute based on OFFICIAL match status codes
-                // 2 = First half (use minute as-is)
-                // 3 = Half-time (no minute)
-                // 4 = Second half (add 45)
-                // 5/6 = Overtime (add 90)
-                // 7 = Penalty shoot-out (no minute typically)
-                // 8 = End (no minute)
+                // Final minute assignment based on status
+                // (Only needed for direct minute values, timestamp calculations already account for status)
                 if (parsedMinute !== null && parsedMinute >= 0) {
                     if (statusId === 3) {
                         // Halftime - don't show a minute
                         minute = null;
-                    } else if (statusId === 4) {
-                        // Second half - add 45 since kickoff timestamp is for 2nd half
-                        minute = parsedMinute + 45;
-                    } else if (statusId === 5 || statusId === 6) {
-                        // Overtime - add 90
-                        minute = parsedMinute + 90;
                     } else if (statusId === 7 || statusId === 8) {
                         // Penalties or End - no minute needed
                         minute = null;
-                    } else {
-                        // First half (2), Not started (1), etc. - use as is
+                    } else if (rawValue > 1000000000) {
+                        // Already calculated with status offset above
                         minute = parsedMinute;
+                    } else {
+                        // Direct minute value - apply status offset
+                        if (statusId === 4) {
+                            minute = parsedMinute + 45;
+                        } else if (statusId === 5 || statusId === 6) {
+                            minute = parsedMinute + 90;
+                        } else {
+                            minute = parsedMinute;
+                        }
                     }
                 }
             }
