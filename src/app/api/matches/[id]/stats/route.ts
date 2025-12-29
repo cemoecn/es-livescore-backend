@@ -170,6 +170,7 @@ async function fetchStatsFromAPI(matchId: string): Promise<StatRow[]> {
         }
 
         // Last resort: Try team_stats/detail endpoint with uuid parameter
+        // This endpoint returns stats directly as an array of team objects (not wrapped in match)
         console.log(`[Stats] Trying team_stats/detail...`);
         url = `${API_URL}/v1/football/match/team_stats/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${matchId}`;
 
@@ -180,18 +181,44 @@ async function fetchStatsFromAPI(matchId: string): Promise<StatRow[]> {
 
         if (response.ok) {
             const data = await response.json();
-            if (data.code === 0 && data.results && Array.isArray(data.results) && data.results.length > 0) {
-                const matchResult = data.results.find((r: any) => r.id === matchId);
-                if (matchResult && matchResult.stats && Array.isArray(matchResult.stats)) {
-                    // Check if it's simple format [{type, home, away}] or detailed format [{team_id, ...fields}]
-                    const firstStat = matchResult.stats[0];
-                    if (firstStat && 'type' in firstStat && 'home' in firstStat) {
-                        // Simple format
-                        console.log(`[Stats] Found ${matchResult.stats.length} stats in team_stats/detail (simple)`);
-                        return parseSimpleStats(matchResult.stats);
-                    } else if (firstStat && 'team_id' in firstStat && matchResult.stats.length >= 2) {
-                        // Detailed format with per-team data
-                        console.log(`[Stats] Found stats in team_stats/detail (detailed)`);
+            console.log(`[Stats] team_stats/detail response code: ${data.code}, results length: ${Array.isArray(data.results) ? data.results.length : 'N/A'}`);
+
+            if (data.code === 0 && data.results && Array.isArray(data.results) && data.results.length >= 2) {
+                const firstItem = data.results[0];
+
+                // Check if it's the detailed team format with team_id, ball_possession, etc.
+                if (firstItem && 'team_id' in firstItem && 'ball_possession' in firstItem) {
+                    console.log(`[Stats] Found detailed team stats for ${matchId}`);
+                    return parseDetailedStats(data.results[0], data.results[1]);
+                }
+                // Check if it's simple format with type, home, away
+                else if (firstItem && 'type' in firstItem && 'home' in firstItem) {
+                    console.log(`[Stats] Found simple stats for ${matchId}`);
+                    return parseSimpleStats(data.results);
+                }
+            }
+        }
+
+        // Try live/history endpoint for finished matches (last 30 days)
+        console.log(`[Stats] Trying live/history...`);
+        url = `${API_URL}/v1/football/match/live/history?user=${USERNAME}&secret=${API_KEY}&uuid=${matchId}`;
+
+        response = await fetch(url, {
+            headers: { 'Accept': 'application/json' },
+            cache: 'no-store',
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            console.log(`[Stats] live/history response code: ${data.code}`);
+
+            if (data.code === 0 && data.results) {
+                // results is an object with {id, score, stats, incidents, tlive}
+                const matchResult = data.results;
+                if (matchResult.stats && Array.isArray(matchResult.stats) && matchResult.stats.length >= 2) {
+                    const firstItem = matchResult.stats[0];
+                    if (firstItem && 'team_id' in firstItem) {
+                        console.log(`[Stats] Found stats in live/history for ${matchId}`);
                         return parseDetailedStats(matchResult.stats[0], matchResult.stats[1]);
                     }
                 }
