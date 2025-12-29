@@ -47,6 +47,9 @@ interface MqttIncidentUpdate {
     out_player_name?: string;
     home_score?: number;
     away_score?: number;
+    // VAR-specific fields (only for type 28)
+    var_reason?: number;  // 1=Goal awarded, 2=Goal not awarded, 3=Penalty awarded, etc.
+    var_result?: number;  // 1=Goal confirmed, 2=Goal cancelled, 3=Penalty confirmed, etc.
 }
 
 // Stats format from WebSocket: { type, home, away }
@@ -212,26 +215,26 @@ async function handleMatchUpdate(data: any) {
             const currentTotal = (currentMatch.home_score || 0) + (currentMatch.away_score || 0);
             const newTotal = homeScore + awayScore;
 
-            // If new score is LOWER, check for VAR events
+            // If new score is LOWER, check for VAR events that cancelled a goal
             if (newTotal < currentTotal) {
-                // Check for VAR-related incidents in this match
-                // Type 16 = Video sync done (VAR decision)
-                // Type 26 = Post Match (sometimes used for VAR)
+                // Check for VAR incidents with var_result = 2 (Goal cancelled) or 4 (Penalty cancelled)
                 // Type 28 = VAR (Video Assistant Referee)
                 const { data: varEvents } = await supabase
                     .from('match_events')
-                    .select('type, time')
+                    .select('type, time, var_reason, var_result')
                     .eq('match_id', data.id)
-                    .in('type', [16, 26, 28])
+                    .eq('type', 28)  // VAR incident
+                    .in('var_result', [2, 4])  // 2=Goal cancelled, 4=Penalty cancelled
                     .order('time', { ascending: false })
                     .limit(1);
 
                 if (varEvents && varEvents.length > 0) {
-                    // VAR event exists - allow score reduction
-                    console.log(`[WS] Match ${data.id}: Allowing VAR score reduction (${homeScore}-${awayScore}), VAR event type ${varEvents[0].type} at ${varEvents[0].time}'`);
+                    // VAR cancelled a goal - allow score reduction
+                    const resultText = varEvents[0].var_result === 2 ? 'Goal cancelled' : 'Penalty cancelled';
+                    console.log(`[WS] Match ${data.id}: Allowing VAR score reduction (${homeScore}-${awayScore}), ${resultText} at ${varEvents[0].time}'`);
                 } else {
-                    // No VAR event - block as stale MQTT message
-                    console.log(`[WS] Match ${data.id}: Blocking stale update (${homeScore}-${awayScore} < current ${currentMatch.home_score}-${currentMatch.away_score}) - no VAR event`);
+                    // No valid VAR cancellation - block as stale MQTT message
+                    console.log(`[WS] Match ${data.id}: Blocking stale update (${homeScore}-${awayScore} < current ${currentMatch.home_score}-${currentMatch.away_score}) - no VAR cancellation`);
                     return;
                 }
             }
@@ -307,6 +310,9 @@ async function handleIncidentsMessage(matchId: string, incidents: MqttIncidentUp
             out_player_name: incident.out_player_name ?? null,
             home_score: incident.home_score ?? null,
             away_score: incident.away_score ?? null,
+            // VAR-specific fields
+            var_reason: incident.var_reason ?? null,
+            var_result: incident.var_result ?? null,
         }));
 
         const { error: insertError } = await supabase
