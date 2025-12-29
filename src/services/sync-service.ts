@@ -48,8 +48,15 @@ const TOP_LEAGUE_IDS = new Set([
     // UEFA
     'z8yomo4h7wq0j6l', // Champions League
     '56ypq3nh0xmd7oj', // Europa League
-    'l965mkyhrw1r1ge', // Conference League
+    'p4jwq2gh754m0ve', // Conference League
 ]);
+
+// Fallback logos for competitions (in case API doesn't provide one)
+const COMPETITION_LOGOS: Record<string, string> = {
+    'z8yomo4h7wq0j6l': 'https://img.thesports.com/football/competition/ac05535bde17129cb598311242b3afba.png', // Champions League
+    '56ypq3nh0xmd7oj': 'https://img.thesports.com/football/competition/1792ba5a12171fedc6d543bdf173f37c.png', // Europa League
+    'p4jwq2gh754m0ve': 'https://img.thesports.com/football/competition/88637a74a2cbd634b8b9504a60d711cd.png', // Conference League
+};
 
 /**
  * Fetch from TheSports API
@@ -213,7 +220,81 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
         return { synced: 0, errors: 0 };
     }
 
-    // 4. Upsert matches with team names from cache
+    // 4. Collect unique teams and competitions for upsert
+    const teamsToUpsert = new Map<string, { id: string; name: string; short_name: string | null; logo: string | null; country_id: string | null }>();
+    const compsToUpsert = new Map<string, { id: string; name: string; short_name: string | null; logo: string | null; country_id: string | null; primary_color: string | null; secondary_color: string | null }>();
+
+    for (const match of topLeagueMatches) {
+        // Collect home team
+        if (match.home_team_id) {
+            const team = getTeamById(match.home_team_id);
+            if (team && !teamsToUpsert.has(team.id)) {
+                teamsToUpsert.set(team.id, {
+                    id: team.id,
+                    name: team.name,
+                    short_name: team.short_name || null,
+                    logo: team.logo || null,
+                    country_id: team.country_id || null,
+                });
+            }
+        }
+        // Collect away team
+        if (match.away_team_id) {
+            const team = getTeamById(match.away_team_id);
+            if (team && !teamsToUpsert.has(team.id)) {
+                teamsToUpsert.set(team.id, {
+                    id: team.id,
+                    name: team.name,
+                    short_name: team.short_name || null,
+                    logo: team.logo || null,
+                    country_id: team.country_id || null,
+                });
+            }
+        }
+        // Collect competition
+        if (match.competition_id) {
+            const comp = getCompetitionById(match.competition_id);
+            if (comp && !compsToUpsert.has(comp.id)) {
+                compsToUpsert.set(comp.id, {
+                    id: comp.id,
+                    name: comp.name,
+                    short_name: comp.short_name || null,
+                    logo: comp.logo || COMPETITION_LOGOS[comp.id] || null,
+                    country_id: comp.country_id || null,
+                    primary_color: comp.primary_color || null,
+                    secondary_color: comp.secondary_color || null,
+                });
+            }
+        }
+    }
+
+    // 5. Upsert teams to Supabase
+    if (teamsToUpsert.size > 0) {
+        console.log(`[Sync] Upserting ${teamsToUpsert.size} teams...`);
+        const teamsArray = Array.from(teamsToUpsert.values()).map(t => ({
+            ...t,
+            updated_at: new Date().toISOString(),
+        }));
+        const { error: teamsError } = await supabase.from('teams').upsert(teamsArray, { onConflict: 'id' });
+        if (teamsError) {
+            console.error('[Sync] Teams upsert error:', teamsError.message);
+        }
+    }
+
+    // 6. Upsert competitions to Supabase
+    if (compsToUpsert.size > 0) {
+        console.log(`[Sync] Upserting ${compsToUpsert.size} competitions...`);
+        const compsArray = Array.from(compsToUpsert.values()).map(c => ({
+            ...c,
+            updated_at: new Date().toISOString(),
+        }));
+        const { error: compsError } = await supabase.from('competitions').upsert(compsArray, { onConflict: 'id' });
+        if (compsError) {
+            console.error('[Sync] Competitions upsert error:', compsError.message);
+        }
+    }
+
+    // 7. Upsert matches with team names from cache
     for (const match of topLeagueMatches) {
         try {
             const homeTeam = getTeamById(match.home_team_id || '');
@@ -237,7 +318,7 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
                 away_team_name: awayTeam?.name || 'TBD',
                 away_team_logo: awayTeam?.logo || '',
                 competition_name: comp?.short_name || comp?.name || 'Unknown',
-                competition_logo: comp?.logo || '',
+                competition_logo: comp?.logo || COMPETITION_LOGOS[match.competition_id || ''] || '',
                 competition_country: country?.name || '',
                 home_team_id: match.home_team_id || null,
                 away_team_id: match.away_team_id || null,

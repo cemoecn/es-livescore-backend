@@ -8,6 +8,13 @@ import { supabase } from '@/lib/supabase';
 import { ensureCachesLoaded, getCacheStats, getCompetitionById, getTeamById } from '@/services/cache';
 import { NextResponse } from 'next/server';
 
+// Fallback logos for competitions (in case API doesn't provide one)
+const COMPETITION_LOGOS: Record<string, string> = {
+    'z8yomo4h7wq0j6l': 'https://img.thesports.com/football/competition/ac05535bde17129cb598311242b3afba.png', // Champions League
+    '56ypq3nh0xmd7oj': 'https://img.thesports.com/football/competition/1792ba5a12171fedc6d543bdf173f37c.png', // Europa League
+    'p4jwq2gh754m0ve': 'https://img.thesports.com/football/competition/88637a74a2cbd634b8b9504a60d711cd.png', // Conference League
+};
+
 export async function GET() {
     try {
         console.log('[Fix] Starting team name fix...');
@@ -60,7 +67,7 @@ export async function GET() {
                     away_team_name: awayTeam?.name || match.away_team_name || 'TBD',
                     away_team_logo: awayTeam?.logo || '',
                     competition_name: comp?.short_name || comp?.name || 'Unknown',
-                    competition_logo: comp?.logo || '',
+                    competition_logo: comp?.logo || COMPETITION_LOGOS[match.competition_id || ''] || '',
                     competition_country: comp?.country_id || '',
                     updated_at: new Date().toISOString(),
                 })
