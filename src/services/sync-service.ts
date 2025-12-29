@@ -343,9 +343,9 @@ export async function syncDailyMatches(date: string): Promise<{ synced: number; 
 
     console.log(`[Sync] Daily sync complete: ${synced} matches synced, ${errors} errors`);
 
-    // 5. Update live scores
-    const liveResult = await syncLiveMatches();
-    console.log(`[Sync] Live update: ${liveResult.synced} updated`);
+    // NOTE: Live score updates are now handled exclusively by WebSocket (MQTT)
+    // Do NOT call syncLiveMatches() here as it would overwrite real-time WebSocket data
+    // with potentially stale HTTP API data
 
     return { synced, errors };
 }
