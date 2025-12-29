@@ -40,6 +40,11 @@ const STAT_TYPE_MAP: Record<number, { label: string; labelDe: string; isPercenta
     24: { label: 'Long Balls', labelDe: 'Lange Bälle' },
     25: { label: 'Goal Kicks', labelDe: 'Abstöße' },
     26: { label: 'Throw-ins', labelDe: 'Einwürfe' },
+    27: { label: 'Hit Woodwork', labelDe: 'Pfostentreffer' },
+    28: { label: 'Key Passes', labelDe: 'Schlüsselpässe' },
+    29: { label: 'Dribbles Successful', labelDe: 'Erfolgreiche Dribblings' },
+    30: { label: 'Duels', labelDe: 'Zweikämpfe' },
+    31: { label: 'Possession Lost', labelDe: 'Ballverluste' },
 };
 
 // Cache expiry time (60 seconds for live matches)
