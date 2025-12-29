@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
                 matchFound,
                 matchStatsCount: matchStats ? matchStats.length : 0,
                 sampleStats: matchStats?.slice(0, 3) || null,
+                sampleMatchIds: Array.isArray(data.results) ? data.results.slice(0, 5).map((r: any) => r.id) : null,
             };
         } catch (e) {
             results[ep.name] = {
