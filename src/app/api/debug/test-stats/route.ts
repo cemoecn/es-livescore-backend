@@ -21,8 +21,9 @@ export async function GET(request: NextRequest) {
         { name: 'team_stats/detail (id)', url: `/v1/football/match/team_stats/detail?user=${USERNAME}&secret=${API_KEY}&id=${matchId}` },
         { name: 'team_stats/detail (uuid)', url: `/v1/football/match/team_stats/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${matchId}` },
         { name: 'half/team_stats/list', url: `/v1/football/match/half/team_stats/list?user=${USERNAME}&secret=${API_KEY}` },
-        { name: 'half/team_stats/detail', url: `/v1/football/match/half/team_stats/detail?user=${USERNAME}&secret=${API_KEY}&id=${matchId}` },
+        { name: 'half/team_stats/detail', url: `/v1/football/match/half/team_stats/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${matchId}` },
         { name: 'detail_live', url: `/v1/football/match/detail_live?user=${USERNAME}&secret=${API_KEY}` },
+        { name: 'live/history', url: `/v1/football/match/live/history?user=${USERNAME}&secret=${API_KEY}&uuid=${matchId}` },
     ];
 
     for (const ep of endpoints) {
@@ -48,15 +49,20 @@ export async function GET(request: NextRequest) {
                 }
             }
 
+            // For team_stats/detail, show raw sample since format is different
+            const rawSample = ep.name.includes('detail') || ep.name.includes('history')
+                ? (Array.isArray(data.results) ? data.results.slice(0, 2) : data.results)
+                : null;
+
             results[ep.name] = {
                 authorized: !data.err,
                 error: data.err || null,
                 code: data.code,
-                resultsCount: Array.isArray(data.results) ? data.results.length : 'N/A',
+                resultsCount: Array.isArray(data.results) ? data.results.length : (data.results ? 'object' : 'N/A'),
                 matchFound,
                 matchStatsCount: matchStats ? matchStats.length : 0,
-                sampleStats: matchStats?.slice(0, 3) || null,
                 sampleMatchIds: Array.isArray(data.results) ? data.results.slice(0, 5).map((r: any) => r.id) : null,
+                rawSample,
             };
         } catch (e) {
             results[ep.name] = {
