@@ -202,35 +202,6 @@ async function handleMatchUpdate(data: any) {
 
         console.log(`[WS] Match ${data.id}: ${status}, score=${homeScore}-${awayScore}, minute=${minute}`);
 
-        // IMPORTANT: Prevent rapid score flip-flopping from stale MQTT messages
-        // But allow legitimate score decreases (VAR decisions) after sufficient time
-        const { data: currentMatch } = await supabase
-            .from('matches')
-            .select('home_score, away_score, updated_at')
-            .eq('id', data.id)
-            .single();
-
-        if (currentMatch) {
-            const currentTotal = (currentMatch.home_score || 0) + (currentMatch.away_score || 0);
-            const newTotal = homeScore + awayScore;
-
-            // If new score is lower, check if enough time has passed
-            // Allow score decreases after 10 seconds (for VAR decisions)
-            // But block rapid flip-flopping (stale MQTT messages)
-            if (newTotal < currentTotal) {
-                const lastUpdate = new Date(currentMatch.updated_at).getTime();
-                const now = Date.now();
-                const timeSinceLastUpdate = now - lastUpdate;
-
-                if (timeSinceLastUpdate < 10000) { // 10 seconds
-                    console.log(`[WS] Match ${data.id}: Ignoring rapid stale update (${homeScore}-${awayScore} < ${currentMatch.home_score}-${currentMatch.away_score}, ${Math.round(timeSinceLastUpdate / 1000)}s ago)`);
-                    return; // Block rapid flip-flopping
-                } else {
-                    console.log(`[WS] Match ${data.id}: Allowing score decrease (VAR?) after ${Math.round(timeSinceLastUpdate / 1000)}s`);
-                }
-            }
-        }
-
         // Use UPDATE (not UPSERT) - only update existing matches
         // New matches with full team data come from the daily CRON sync
         // WebSocket only updates: status, minute, score, updated_at
