@@ -301,6 +301,26 @@ function parseDetailedStats(homeStats: any, awayStats: any): StatRow[] {
         });
     }
 
+    // Blocked shots
+    if (homeStats.blocked_shots !== undefined) {
+        stats.push({
+            type: 19,
+            label: 'Geblockte Schüsse',
+            homeValue: homeStats.blocked_shots || 0,
+            awayValue: awayStats.blocked_shots || 0,
+        });
+    }
+
+    // Hit woodwork
+    if (homeStats.hit_woodwork !== undefined) {
+        stats.push({
+            type: 27,
+            label: 'Pfostentreffer',
+            homeValue: homeStats.hit_woodwork || 0,
+            awayValue: awayStats.hit_woodwork || 0,
+        });
+    }
+
     // Corner kicks
     if (homeStats.corner_kicks !== undefined) {
         stats.push({
@@ -361,6 +381,49 @@ function parseDetailedStats(homeStats: any, awayStats: any): StatRow[] {
         });
     }
 
+    // Pass accuracy
+    if (homeStats.passes_accuracy !== undefined && homeStats.passes !== undefined) {
+        const homeAccuracy = homeStats.passes > 0 ? Math.round((homeStats.passes_accuracy / homeStats.passes) * 100) : 0;
+        const awayAccuracy = awayStats.passes > 0 ? Math.round((awayStats.passes_accuracy / awayStats.passes) * 100) : 0;
+        stats.push({
+            type: 12,
+            label: 'Passgenauigkeit',
+            homeValue: homeAccuracy,
+            awayValue: awayAccuracy,
+            isPercentage: true,
+        });
+    }
+
+    // Key passes
+    if (homeStats.key_passes !== undefined) {
+        stats.push({
+            type: 28,
+            label: 'Schlüsselpässe',
+            homeValue: homeStats.key_passes || 0,
+            awayValue: awayStats.key_passes || 0,
+        });
+    }
+
+    // Crosses
+    if (homeStats.crosses !== undefined) {
+        stats.push({
+            type: 16,
+            label: 'Flanken',
+            homeValue: homeStats.crosses || 0,
+            awayValue: awayStats.crosses || 0,
+        });
+    }
+
+    // Long balls
+    if (homeStats.long_balls !== undefined) {
+        stats.push({
+            type: 24,
+            label: 'Lange Bälle',
+            homeValue: homeStats.long_balls || 0,
+            awayValue: awayStats.long_balls || 0,
+        });
+    }
+
     // Tackles
     if (homeStats.tackles !== undefined) {
         stats.push({
@@ -368,6 +431,76 @@ function parseDetailedStats(homeStats: any, awayStats: any): StatRow[] {
             label: 'Tackles',
             homeValue: homeStats.tackles || 0,
             awayValue: awayStats.tackles || 0,
+        });
+    }
+
+    // Interceptions
+    if (homeStats.interceptions !== undefined) {
+        stats.push({
+            type: 17,
+            label: 'Abfangaktionen',
+            homeValue: homeStats.interceptions || 0,
+            awayValue: awayStats.interceptions || 0,
+        });
+    }
+
+    // Clearances
+    if (homeStats.clearances !== undefined) {
+        stats.push({
+            type: 18,
+            label: 'Klärungsaktionen',
+            homeValue: homeStats.clearances || 0,
+            awayValue: awayStats.clearances || 0,
+        });
+    }
+
+    // Dribbles
+    if (homeStats.dribble !== undefined) {
+        stats.push({
+            type: 21,
+            label: 'Dribblings',
+            homeValue: homeStats.dribble || 0,
+            awayValue: awayStats.dribble || 0,
+        });
+    }
+
+    // Dribbles successful
+    if (homeStats.dribble_succ !== undefined) {
+        stats.push({
+            type: 29,
+            label: 'Erfolgreiche Dribblings',
+            homeValue: homeStats.dribble_succ || 0,
+            awayValue: awayStats.dribble_succ || 0,
+        });
+    }
+
+    // Duels
+    if (homeStats.duels !== undefined) {
+        stats.push({
+            type: 30,
+            label: 'Zweikämpfe',
+            homeValue: homeStats.duels || 0,
+            awayValue: awayStats.duels || 0,
+        });
+    }
+
+    // Duels won
+    if (homeStats.duels_won !== undefined) {
+        stats.push({
+            type: 22,
+            label: 'Zweikämpfe gewonnen',
+            homeValue: homeStats.duels_won || 0,
+            awayValue: awayStats.duels_won || 0,
+        });
+    }
+
+    // Possession lost
+    if (homeStats.poss_losts !== undefined) {
+        stats.push({
+            type: 31,
+            label: 'Ballverluste',
+            homeValue: homeStats.poss_losts || 0,
+            awayValue: awayStats.poss_losts || 0,
         });
     }
 
