@@ -303,7 +303,8 @@ async function handleIncidentsMessage(matchId: string, incidents: MqttIncidentUp
         }
 
         // Update match score from the latest goal incident
-        const goalIncidents = incidents.filter(i => i.type === 1); // type 1 = goal
+        // Type 1 = Goal, Type 8 = Penalty (also counts as goal)
+        const goalIncidents = incidents.filter(i => i.type === 1 || i.type === 8);
         if (goalIncidents.length > 0) {
             const lastGoal = goalIncidents[goalIncidents.length - 1];
             if (lastGoal.home_score !== undefined && lastGoal.away_score !== undefined) {
