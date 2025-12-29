@@ -49,6 +49,13 @@ interface MqttIncidentUpdate {
     away_score?: number;
 }
 
+// Stats format from WebSocket: { type, home, away }
+interface MqttStatUpdate {
+    type: number;
+    home: number;
+    away: number;
+}
+
 // Status mapping - OFFICIAL TheSports values
 // https://www.thesports.com docs
 const STATUS_MAP: Record<number, string> = {
@@ -296,6 +303,45 @@ async function handleIncidentsMessage(matchId: string, incidents: MqttIncidentUp
 }
 
 /**
+ * Handle incoming stats message
+ * Stats format: [{ type, home, away }, ...]
+ * Upserts to match_stats table for real-time updates
+ */
+async function handleStatsMessage(matchId: string, stats: MqttStatUpdate[]) {
+    try {
+        if (!matchId || !stats || stats.length === 0) {
+            return;
+        }
+
+        console.log(`[WS] Processing ${stats.length} stats for match ${matchId}`);
+
+        // Upsert each stat
+        const statsToUpsert = stats.map(stat => ({
+            match_id: matchId,
+            stat_type: stat.type,
+            home_value: stat.home || 0,
+            away_value: stat.away || 0,
+            period: 'full',
+            updated_at: new Date().toISOString(),
+        }));
+
+        const { error } = await supabase
+            .from('match_stats')
+            .upsert(statsToUpsert, {
+                onConflict: 'match_id,stat_type,period',
+            });
+
+        if (error) {
+            console.error(`[WS] Error upserting stats for ${matchId}:`, error.message);
+        } else {
+            console.log(`[WS] ✓ Updated ${stats.length} stats for match ${matchId}`);
+        }
+    } catch (error) {
+        console.error('[WS] Error handling stats:', error);
+    }
+}
+
+/**
  * Connect to MQTT broker
  */
 export function connectMqtt(): Promise<void> {
@@ -372,6 +418,12 @@ export function connectMqtt(): Promise<void> {
                     if (update.incidents && Array.isArray(update.incidents) && update.incidents.length > 0) {
                         console.log(`[WS] Match ${matchId} has ${update.incidents.length} incidents`);
                         handleIncidentsMessage(matchId, update.incidents);
+                    }
+
+                    // Handle stats if present in this update
+                    if (update.stats && Array.isArray(update.stats) && update.stats.length > 0) {
+                        console.log(`[WS] Match ${matchId} has ${update.stats.length} stats`);
+                        handleStatsMessage(matchId, update.stats);
                     }
                 }
             } catch (error) {
