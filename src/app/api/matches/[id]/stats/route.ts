@@ -127,182 +127,224 @@ export async function GET(
 
 async function fetchStatsFromAPI(matchId: string): Promise<StatRow[]> {
     try {
-        // Try team_stats/list first (for live/recent matches)
-        const url = `${API_URL}/v1/football/match/team_stats/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${matchId}`;
+        // Try team_stats/list first (for live/recent matches with stats changed in last 120s)
+        // This endpoint returns stats in the simple { type, home, away } format
+        let url = `${API_URL}/v1/football/match/team_stats/list?user=${USERNAME}&secret=${API_KEY}`;
 
-        const response = await fetch(url, {
+        console.log(`[Stats] Trying team_stats/list...`);
+        let response = await fetch(url, {
             headers: { 'Accept': 'application/json' },
             cache: 'no-store',
         });
 
-        if (!response.ok) {
-            console.error(`[Stats] API response not ok: ${response.status}`);
-            return [];
+        if (response.ok) {
+            const data = await response.json();
+            if (data.code === 0 && data.results) {
+                // Find our match in the results
+                const matchData = findMatchInResults(data.results, matchId);
+                if (matchData && matchData.stats && matchData.stats.length > 0) {
+                    console.log(`[Stats] Found ${matchData.stats.length} stats in team_stats/list`);
+                    return parseSimpleStats(matchData.stats);
+                }
+            }
         }
 
-        const data = await response.json();
+        // Fallback: Try detail_live endpoint which has stats for all live matches
+        console.log(`[Stats] Trying detail_live...`);
+        url = `${API_URL}/v1/football/match/detail_live?user=${USERNAME}&secret=${API_KEY}`;
 
-        if (data.err || data.code !== 0) {
-            console.error(`[Stats] API error:`, data.err || data.message);
-            return [];
-        }
-
-        const results = data.results;
-        if (!results || !Array.isArray(results) || results.length === 0) {
-            return [];
-        }
-
-        // Find the match result
-        const matchResult = results.find((r: any) => r.id === matchId);
-        if (!matchResult || !matchResult.stats || !Array.isArray(matchResult.stats)) {
-            return [];
-        }
-
-        // Parse stats - format from API: stats is an array of team stats objects
-        // Each object has team_id and various stat fields
-        const teamStats = matchResult.stats;
-        if (teamStats.length < 2) {
-            return [];
-        }
-
-        const homeStats = teamStats[0];
-        const awayStats = teamStats[1];
-
-        // Map to our format
-        const stats: StatRow[] = [];
-
-        // Ball possession
-        if (homeStats.ball_possession !== undefined) {
-            stats.push({
-                type: 1,
-                label: 'Ballbesitz',
-                homeValue: homeStats.ball_possession || 0,
-                awayValue: awayStats.ball_possession || 0,
-                isPercentage: true,
-            });
-        }
-
-        // Shots
-        if (homeStats.shots !== undefined) {
-            stats.push({
-                type: 2,
-                label: 'Schüsse',
-                homeValue: homeStats.shots || 0,
-                awayValue: awayStats.shots || 0,
-            });
-        }
-
-        // Shots on target
-        if (homeStats.shots_on_target !== undefined) {
-            stats.push({
-                type: 3,
-                label: 'Schüsse aufs Tor',
-                homeValue: homeStats.shots_on_target || 0,
-                awayValue: awayStats.shots_on_target || 0,
-            });
-        }
-
-        // Big chances
-        stats.push({
-            type: 20,
-            label: 'Großchancen',
-            homeValue: homeStats.fastbreaks || 0,
-            awayValue: awayStats.fastbreaks || 0,
+        response = await fetch(url, {
+            headers: { 'Accept': 'application/json' },
+            cache: 'no-store',
         });
 
-        // Saves
-        stats.push({
-            type: 10,
-            label: 'Paraden',
-            homeValue: homeStats.goals_against !== undefined ? homeStats.goals_against : 0,
-            awayValue: awayStats.goals_against !== undefined ? awayStats.goals_against : 0,
+        if (response.ok) {
+            const data = await response.json();
+            if (data.code === 0 && data.results) {
+                const matchData = findMatchInResults(data.results, matchId);
+                if (matchData && matchData.stats && matchData.stats.length > 0) {
+                    console.log(`[Stats] Found ${matchData.stats.length} stats in detail_live`);
+                    return parseSimpleStats(matchData.stats);
+                }
+            }
+        }
+
+        // Last resort: Try team_stats/detail endpoint with uuid parameter
+        console.log(`[Stats] Trying team_stats/detail...`);
+        url = `${API_URL}/v1/football/match/team_stats/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${matchId}`;
+
+        response = await fetch(url, {
+            headers: { 'Accept': 'application/json' },
+            cache: 'no-store',
         });
 
-        // Corner kicks
-        if (homeStats.corner_kicks !== undefined) {
-            stats.push({
-                type: 5,
-                label: 'Eckstöße',
-                homeValue: homeStats.corner_kicks || 0,
-                awayValue: awayStats.corner_kicks || 0,
-            });
+        if (response.ok) {
+            const data = await response.json();
+            if (data.code === 0 && data.results && Array.isArray(data.results) && data.results.length > 0) {
+                const matchResult = data.results.find((r: any) => r.id === matchId);
+                if (matchResult && matchResult.stats && Array.isArray(matchResult.stats)) {
+                    // Check if it's simple format [{type, home, away}] or detailed format [{team_id, ...fields}]
+                    const firstStat = matchResult.stats[0];
+                    if (firstStat && 'type' in firstStat && 'home' in firstStat) {
+                        // Simple format
+                        console.log(`[Stats] Found ${matchResult.stats.length} stats in team_stats/detail (simple)`);
+                        return parseSimpleStats(matchResult.stats);
+                    } else if (firstStat && 'team_id' in firstStat && matchResult.stats.length >= 2) {
+                        // Detailed format with per-team data
+                        console.log(`[Stats] Found stats in team_stats/detail (detailed)`);
+                        return parseDetailedStats(matchResult.stats[0], matchResult.stats[1]);
+                    }
+                }
+            }
         }
 
-        // Fouls
-        if (homeStats.fouls !== undefined) {
-            stats.push({
-                type: 4,
-                label: 'Fouls',
-                homeValue: homeStats.fouls || 0,
-                awayValue: awayStats.fouls || 0,
-            });
-        }
-
-        // Passes
-        if (homeStats.passes !== undefined) {
-            stats.push({
-                type: 11,
-                label: 'Pässe',
-                homeValue: homeStats.passes || 0,
-                awayValue: awayStats.passes || 0,
-            });
-        }
-
-        // Tackles
-        if (homeStats.tackles !== undefined) {
-            stats.push({
-                type: 13,
-                label: 'Tackles',
-                homeValue: homeStats.tackles || 0,
-                awayValue: awayStats.tackles || 0,
-            });
-        }
-
-        // Free kicks
-        if (homeStats.freekicks !== undefined) {
-            stats.push({
-                type: 9,
-                label: 'Freistöße',
-                homeValue: homeStats.freekicks || 0,
-                awayValue: awayStats.freekicks || 0,
-            });
-        }
-
-        // Offsides
-        if (homeStats.offsides !== undefined) {
-            stats.push({
-                type: 6,
-                label: 'Abseits',
-                homeValue: homeStats.offsides || 0,
-                awayValue: awayStats.offsides || 0,
-            });
-        }
-
-        // Yellow cards
-        if (homeStats.yellow_cards !== undefined) {
-            stats.push({
-                type: 7,
-                label: 'Gelbe Karten',
-                homeValue: homeStats.yellow_cards || 0,
-                awayValue: awayStats.yellow_cards || 0,
-            });
-        }
-
-        // Red cards
-        if (homeStats.red_cards !== undefined) {
-            stats.push({
-                type: 8,
-                label: 'Rote Karten',
-                homeValue: homeStats.red_cards || 0,
-                awayValue: awayStats.red_cards || 0,
-            });
-        }
-
-        return stats;
+        console.log(`[Stats] No stats found for ${matchId}`);
+        return [];
     } catch (error) {
         console.error('[Stats] Fetch error:', error);
         return [];
     }
+}
+
+// Helper to find match in various result structures
+function findMatchInResults(results: any, matchId: string): any | null {
+    if (Array.isArray(results)) {
+        return results.find((r: any) => r.id === matchId);
+    } else if (results && typeof results === 'object') {
+        if (results.id === matchId) {
+            return results;
+        }
+        // Check nested results arrays
+        for (const key of Object.keys(results)) {
+            if (Array.isArray(results[key])) {
+                const found = results[key].find((r: any) => r.id === matchId);
+                if (found) return found;
+            }
+        }
+    }
+    return null;
+}
+
+// Parse simple stats format: [{ type, home, away }, ...]
+function parseSimpleStats(stats: Array<{ type: number; home: number; away: number }>): StatRow[] {
+    return stats
+        .filter(stat => STAT_TYPE_MAP[stat.type]) // Only include known types
+        .map(stat => ({
+            type: stat.type,
+            label: STAT_TYPE_MAP[stat.type]?.labelDe || `Typ ${stat.type}`,
+            homeValue: stat.home || 0,
+            awayValue: stat.away || 0,
+            isPercentage: STAT_TYPE_MAP[stat.type]?.isPercentage,
+        }))
+        .sort((a, b) => a.type - b.type); // Sort by type for consistent ordering
+}
+
+// Parse detailed stats format with team objects
+function parseDetailedStats(homeStats: any, awayStats: any): StatRow[] {
+    const stats: StatRow[] = [];
+
+    // Ball possession
+    if (homeStats.ball_possession !== undefined) {
+        stats.push({
+            type: 1,
+            label: 'Ballbesitz',
+            homeValue: homeStats.ball_possession || 0,
+            awayValue: awayStats.ball_possession || 0,
+            isPercentage: true,
+        });
+    }
+
+    // Shots
+    if (homeStats.shots !== undefined) {
+        stats.push({
+            type: 2,
+            label: 'Schüsse',
+            homeValue: homeStats.shots || 0,
+            awayValue: awayStats.shots || 0,
+        });
+    }
+
+    // Shots on target
+    if (homeStats.shots_on_target !== undefined) {
+        stats.push({
+            type: 3,
+            label: 'Schüsse aufs Tor',
+            homeValue: homeStats.shots_on_target || 0,
+            awayValue: awayStats.shots_on_target || 0,
+        });
+    }
+
+    // Corner kicks
+    if (homeStats.corner_kicks !== undefined) {
+        stats.push({
+            type: 5,
+            label: 'Eckstöße',
+            homeValue: homeStats.corner_kicks || 0,
+            awayValue: awayStats.corner_kicks || 0,
+        });
+    }
+
+    // Fouls
+    if (homeStats.fouls !== undefined) {
+        stats.push({
+            type: 4,
+            label: 'Fouls',
+            homeValue: homeStats.fouls || 0,
+            awayValue: awayStats.fouls || 0,
+        });
+    }
+
+    // Yellow cards
+    if (homeStats.yellow_cards !== undefined) {
+        stats.push({
+            type: 7,
+            label: 'Gelbe Karten',
+            homeValue: homeStats.yellow_cards || 0,
+            awayValue: awayStats.yellow_cards || 0,
+        });
+    }
+
+    // Red cards
+    if (homeStats.red_cards !== undefined) {
+        stats.push({
+            type: 8,
+            label: 'Rote Karten',
+            homeValue: homeStats.red_cards || 0,
+            awayValue: awayStats.red_cards || 0,
+        });
+    }
+
+    // Offsides
+    if (homeStats.offsides !== undefined) {
+        stats.push({
+            type: 6,
+            label: 'Abseits',
+            homeValue: homeStats.offsides || 0,
+            awayValue: awayStats.offsides || 0,
+        });
+    }
+
+    // Passes
+    if (homeStats.passes !== undefined) {
+        stats.push({
+            type: 11,
+            label: 'Pässe',
+            homeValue: homeStats.passes || 0,
+            awayValue: awayStats.passes || 0,
+        });
+    }
+
+    // Tackles
+    if (homeStats.tackles !== undefined) {
+        stats.push({
+            type: 13,
+            label: 'Tackles',
+            homeValue: homeStats.tackles || 0,
+            awayValue: awayStats.tackles || 0,
+        });
+    }
+
+    return stats;
 }
 
 async function upsertStats(matchId: string, stats: StatRow[]): Promise<void> {
