@@ -202,6 +202,25 @@ async function handleMatchUpdate(data: any) {
 
         console.log(`[WS] Match ${data.id}: ${status}, score=${homeScore}-${awayScore}, minute=${minute}`);
 
+        // IMPORTANT: Validate score doesn't go backwards
+        // In football, scores can only increase - never decrease
+        // This prevents race conditions where old MQTT messages arrive after newer ones
+        const { data: currentMatch } = await supabase
+            .from('matches')
+            .select('home_score, away_score')
+            .eq('id', data.id)
+            .single();
+
+        if (currentMatch) {
+            const currentTotal = (currentMatch.home_score || 0) + (currentMatch.away_score || 0);
+            const newTotal = homeScore + awayScore;
+
+            if (newTotal < currentTotal) {
+                console.log(`[WS] Match ${data.id}: Ignoring stale update (${homeScore}-${awayScore} < current ${currentMatch.home_score}-${currentMatch.away_score})`);
+                return; // Don't update with stale data
+            }
+        }
+
         // Use UPDATE (not UPSERT) - only update existing matches
         // New matches with full team data come from the daily CRON sync
         // WebSocket only updates: status, minute, score, updated_at
