@@ -200,6 +200,26 @@ async function handleMatchUpdate(data: any) {
 
         const status = STATUS_MAP[statusId] || 'unknown';
 
+        // IMPORTANT: TheSports MQTT sends duplicate/stale messages
+        // We MUST validate that score doesn't decrease (except for real VAR decisions)
+        // Check current score in database and only update if new score >= current
+        const { data: currentMatch } = await supabase
+            .from('matches')
+            .select('home_score, away_score')
+            .eq('id', data.id)
+            .single();
+
+        if (currentMatch) {
+            const currentTotal = (currentMatch.home_score || 0) + (currentMatch.away_score || 0);
+            const newTotal = homeScore + awayScore;
+
+            // Block score decreases - MQTT sends stale data that would cause flickering
+            if (newTotal < currentTotal) {
+                console.log(`[WS] Match ${data.id}: Blocking stale update (${homeScore}-${awayScore} < current ${currentMatch.home_score}-${currentMatch.away_score})`);
+                return;
+            }
+        }
+
         console.log(`[WS] Match ${data.id}: ${status}, score=${homeScore}-${awayScore}, minute=${minute}`);
 
         // Use UPDATE (not UPSERT) - only update existing matches
