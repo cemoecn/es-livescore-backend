@@ -185,6 +185,93 @@ export async function GET(
             }
         }
 
+        // Fallback: If no table found in table/live, calculate from Supabase matches
+        if (top3Standings.length === 0) {
+            // Get finished matches for this league
+            const { data: finishedMatches } = await supabase
+                .from('matches')
+                .select('home_team_id, home_team_name, home_team_logo, away_team_id, away_team_name, away_team_logo, home_score, away_score')
+                .eq('competition_id', leagueId)
+                .eq('status', 'finished');
+
+            if (finishedMatches && finishedMatches.length > 0) {
+                // Calculate standings from matches
+                type TeamStats = {
+                    id: string;
+                    name: string;
+                    logo: string;
+                    played: number;
+                    won: number;
+                    drawn: number;
+                    lost: number;
+                    goalsFor: number;
+                    goalsAgainst: number;
+                    points: number;
+                };
+                const teamStatsMap = new Map<string, TeamStats>();
+
+                for (const match of finishedMatches) {
+                    const homeId = match.home_team_id;
+                    const awayId = match.away_team_id;
+                    const homeScore = match.home_score ?? 0;
+                    const awayScore = match.away_score ?? 0;
+
+                    if (!teamStatsMap.has(homeId)) {
+                        teamStatsMap.set(homeId, {
+                            id: homeId,
+                            name: match.home_team_name || teamMap.get(homeId)?.name || 'Unknown',
+                            logo: match.home_team_logo || teamMap.get(homeId)?.logo || '',
+                            played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0,
+                        });
+                    }
+                    if (!teamStatsMap.has(awayId)) {
+                        teamStatsMap.set(awayId, {
+                            id: awayId,
+                            name: match.away_team_name || teamMap.get(awayId)?.name || 'Unknown',
+                            logo: match.away_team_logo || teamMap.get(awayId)?.logo || '',
+                            played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0,
+                        });
+                    }
+
+                    const homeStats = teamStatsMap.get(homeId)!;
+                    const awayStats = teamStatsMap.get(awayId)!;
+
+                    homeStats.played++; awayStats.played++;
+                    homeStats.goalsFor += homeScore; homeStats.goalsAgainst += awayScore;
+                    awayStats.goalsFor += awayScore; awayStats.goalsAgainst += homeScore;
+
+                    if (homeScore > awayScore) {
+                        homeStats.won++; homeStats.points += 3; awayStats.lost++;
+                    } else if (homeScore < awayScore) {
+                        awayStats.won++; awayStats.points += 3; homeStats.lost++;
+                    } else {
+                        homeStats.drawn++; awayStats.drawn++; homeStats.points++; awayStats.points++;
+                    }
+                }
+
+                // Sort and get top 3
+                const sortedStandings = Array.from(teamStatsMap.values())
+                    .sort((a, b) => b.points - a.points || (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst));
+
+                if (sortedStandings.length > 0) {
+                    currentMatchday = Math.ceil(finishedMatches.length / (sortedStandings.length / 2)) || 1;
+                }
+
+                top3Standings = sortedStandings.slice(0, 3).map((s, idx) => ({
+                    position: idx + 1,
+                    team: s.name,
+                    logo: s.logo,
+                    played: s.played,
+                    won: s.won,
+                    drawn: s.drawn,
+                    lost: s.lost,
+                    goals: `${s.goalsFor}:${s.goalsAgainst}`,
+                    points: s.points,
+                    zone: idx < 4 ? 'cl' : undefined,
+                }));
+            }
+        }
+
         // Find top match (first upcoming match)
         let topMatch = null;
         if (upcomingMatchResult.data && upcomingMatchResult.data.length > 0) {
