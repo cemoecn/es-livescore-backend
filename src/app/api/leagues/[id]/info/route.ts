@@ -66,17 +66,19 @@ export async function GET(
 ) {
     try {
         const { id: leagueId } = await params;
+        const seasonId = SEASON_IDS[leagueId];
 
         // Fetch data in parallel
         const [tableResult, upcomingMatchResult, teamsResult] = await Promise.all([
-            // 1. Get season tables from TheSports API
-            // Using season/recent/table/detail which has more leagues than table/live
-            fetch(`${API_URL}/v1/football/season/recent/table/detail?user=${USERNAME}&secret=${API_KEY}`)
-                .then(r => r.json())
-                .catch(err => {
-                    console.error('Table fetch error:', err);
-                    return null;
-                }),
+            // 1. Get season table from TheSports API with uuid parameter
+            seasonId
+                ? fetch(`${API_URL}/v1/football/season/recent/table/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${seasonId}`)
+                    .then(r => r.json())
+                    .catch(err => {
+                        console.error('Table fetch error:', err);
+                        return null;
+                    })
+                : Promise.resolve(null),
 
             // 2. Get next upcoming match for this league
             supabase
@@ -103,7 +105,8 @@ export async function GET(
             }
         }
 
-        // Process standings from table/live API
+        // Process standings from season/table API
+        // Response structure: { code, results: { promotions, tables: [{ rows: [...] }] } }
         let top3Standings: Array<{
             position: number;
             team: string;
@@ -120,36 +123,32 @@ export async function GET(
         let currentMatchday = 1;
         const seasonInfo = SEASON_INFO[leagueId] || { totalMatchdays: 34, season: '2024/25' };
 
-        if (tableResult?.data && Array.isArray(tableResult.data)) {
-            // Find the table for our league's season
-            const seasonId = SEASON_IDS[leagueId];
-            const tableEntry = tableResult.data.find((t: any) => t.season_id === seasonId);
+        // Parse the results from season/recent/table/detail
+        const tableData = tableResult?.results || tableResult?.data;
+        if (tableData?.tables?.[0]?.rows) {
+            const rows = tableData.tables[0].rows;
 
-            if (tableEntry?.tables?.[0]?.rows) {
-                const rows = tableEntry.tables[0].rows;
-
-                // Calculate current matchday from first team's total games
-                if (rows.length > 0) {
-                    currentMatchday = Math.max(rows[0].total || 1, 1);
-                }
-
-                // Get top 3 standings
-                top3Standings = rows.slice(0, 3).map((row: any, idx: number) => {
-                    const teamInfo = teamMap.get(row.team_id) || { name: `Team ${idx + 1}`, logo: '' };
-                    return {
-                        position: row.position || idx + 1,
-                        team: teamInfo.name,
-                        logo: teamInfo.logo,
-                        played: row.total || 0,
-                        won: row.won || 0,
-                        drawn: row.draw || 0,
-                        lost: row.loss || 0,
-                        goals: `${row.goals || 0}:${row.goals_against || 0}`,
-                        points: row.points || 0,
-                        zone: idx < 4 ? 'cl' : undefined,
-                    };
-                });
+            // Calculate current matchday from first team's total games
+            if (rows.length > 0) {
+                currentMatchday = Math.max(rows[0].total || 1, 1);
             }
+
+            // Get top 3 standings
+            top3Standings = rows.slice(0, 3).map((row: any, idx: number) => {
+                const teamInfo = teamMap.get(row.team_id) || { name: `Team ${idx + 1}`, logo: '' };
+                return {
+                    position: row.position || idx + 1,
+                    team: teamInfo.name,
+                    logo: teamInfo.logo,
+                    played: row.total || 0,
+                    won: row.won || 0,
+                    drawn: row.draw || 0,
+                    lost: row.loss || 0,
+                    goals: `${row.goals || 0}:${row.goals_against || 0}`,
+                    points: row.points || 0,
+                    zone: idx < 4 ? 'cl' : undefined,
+                };
+            });
         }
 
         // Find top match (first upcoming match)
