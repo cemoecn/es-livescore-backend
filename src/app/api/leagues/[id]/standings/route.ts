@@ -66,12 +66,12 @@ const BUNDESLIGA_2024_TEAMS: Record<string, { name: string; logo: string }> = {
     'yl5ergphjy2r8k0': { name: 'FC Bayern Munich', logo: 'https://img.thesports.com/football/team/8e31e674cdfd6deb6698a6f30e605ff7.png' },
     '4zp5rzghe4nq82w': { name: 'Borussia Dortmund', logo: 'https://img.thesports.com/football/team/b2c29f7e22dd5d893d8a59e1c0ba5c56.png' },
     '4zp5rzghewnq82w': { name: 'Bayer 04 Leverkusen', logo: 'https://img.thesports.com/football/team/a9a9d5be1fd1c5b7b0b1bc80261ac04e.png' },
-    'z318q66hdleqo9j': { name: 'Eintracht Frankfurt', logo: 'https://img.thesports.com/football/team/e6c7ad0e4d07c9c6c9e1c7b2b0b5b5b5.png' },
+    'z318q66hdleqo9j': { name: 'Eintracht Frankfurt', logo: 'https://img.thesports.com/football/team/26a59fe5653a96ba72f4f1e4e08b6d4b.png' },
     'kdj2ryoh3wyq1zp': { name: 'RB Leipzig', logo: 'https://img.thesports.com/football/team/b2c29f7e22dd5d893d8a59e1c0ba5c56.png' },
     // Positions 6-8 (from API debug - WERE MISSING)
-    'gx7lm7phd7em2wd': { name: 'VfB Stuttgart', logo: 'https://img.thesports.com/football/team/e6c7ad0e4d07c9c6c9e1c7b2b0b5b5b5.png' },
-    'p3glrw7henvqdyj': { name: 'TSG 1899 Hoffenheim', logo: 'https://img.thesports.com/football/team/e6c7ad0e4d07c9c6c9e1c7b2b0b5b5b5.png' },
-    '9vjxm8gh613r6od': { name: 'Union Berlin', logo: 'https://img.thesports.com/football/team/e6c7ad0e4d07c9c6c9e1c7b2b0b5b5b5.png' },
+    'gx7lm7phd7em2wd': { name: 'VfB Stuttgart', logo: 'https://img.thesports.com/football/team/bfdd500484330d63a723cbc396df762c.png' },
+    'p3glrw7henvqdyj': { name: 'TSG 1899 Hoffenheim', logo: 'https://img.thesports.com/football/team/fe636189a2f3db78d0554c34f0bdaae6.png' },
+    '9vjxm8gh613r6od': { name: 'Union Berlin', logo: 'https://img.thesports.com/football/team/45ab4c846b0d4df5b002c571b16112dc.png' },
     // Positions 9-14 (from Supabase)
     'l965mkyh924r1ge': { name: 'SC Freiburg', logo: 'https://img.thesports.com/football/team/e6c7ad0e4d07c9c6c9e1c7b2b0b5b5b5.png' },
     '9k82rekhdxorepz': { name: 'SV Werder Bremen', logo: 'https://img.thesports.com/football/team/e6c7ad0e4d07c9c6c9e1c7b2b0b5b5b5.png' },
@@ -80,9 +80,9 @@ const BUNDESLIGA_2024_TEAMS: Record<string, { name: string; logo: string }> = {
     'gy0or5jhdoyqwzv': { name: 'Hamburger SV', logo: 'https://img.thesports.com/football/team/e6c7ad0e4d07c9c6c9e1c7b2b0b5b5b5.png' },
     '56ypq3nhdnkmd7o': { name: 'VfL Wolfsburg', logo: 'https://img.thesports.com/football/team/e6c7ad0e4d07c9c6c9e1c7b2b0b5b5b5.png' },
     // Positions 15-17 (from API debug - WERE MISSING)
-    'vl7oqdehzvnr510': { name: 'FC St. Pauli', logo: 'https://img.thesports.com/football/team/e6c7ad0e4d07c9c6c9e1c7b2b0b5b5b5.png' },
-    'gy0or5jhkvwqwzv': { name: '1. FC Heidenheim', logo: 'https://img.thesports.com/football/team/e6c7ad0e4d07c9c6c9e1c7b2b0b5b5b5.png' },
-    'n54qllh261zqvy9': { name: 'Holstein Kiel', logo: 'https://img.thesports.com/football/team/e6c7ad0e4d07c9c6c9e1c7b2b0b5b5b5.png' },
+    'vl7oqdehzvnr510': { name: 'FC St. Pauli', logo: 'https://img.thesports.com/football/team/db4411a3c4ce1d0f092f5b9d1df08664.png' },
+    'gy0or5jhkvwqwzv': { name: '1. FC Heidenheim', logo: 'https://img.thesports.com/football/team/65503b155488a643de688e8dfa849b1f.png' },
+    'n54qllh261zqvy9': { name: 'Holstein Kiel', logo: 'https://img.thesports.com/football/team/65ee743f20fa7db286fdeda4d33c6980.png' },
     // Position 18 (from Supabase)
     'jednm9whl2kryox': { name: '1. FSV Mainz 05', logo: 'https://img.thesports.com/football/team/e6c7ad0e4d07c9c6c9e1c7b2b0b5b5b5.png' },
 };
