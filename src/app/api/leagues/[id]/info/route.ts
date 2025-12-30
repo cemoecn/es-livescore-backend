@@ -2,13 +2,26 @@
  * GET /api/leagues/[id]/info
  * Returns combined info for a league's Info Tab:
  * - Season progress
- * - Top 3 standings
+ * - Top 3 standings (from TheSports table/live API)
  * - Top match of the matchday
  * - Championship history (static)
  */
 
 import { supabase } from '@/lib/supabase';
 import { NextRequest, NextResponse } from 'next/server';
+
+const API_URL = process.env.THESPORTS_API_URL || 'https://api.thesports.com';
+const API_KEY = process.env.THESPORTS_API_KEY || '';
+const USERNAME = process.env.THESPORTS_USERNAME || '';
+
+// Map competition IDs to their current season IDs (will need periodic updates)
+const SEASON_IDS: Record<string, string> = {
+    'gy0or5jhg6qwzv3': '7l6jm04h2kq3ozn', // Bundesliga 2024/25
+    'jednm9whz0ryox8': 'e4wyrn4hgxyq86p', // Premier League 2024/25
+    'vl7oqdehlyr510j': 'kdj2ryohd0yq1zp', // La Liga 2024/25
+    '4zp5rzghp5q82w1': 'n4kq71ghx7lq5dm', // Serie A 2024/25
+    'yl5ergphnzr8k0o': '7l6jm04h0lq3ozn', // Ligue 1 2024/25
+};
 
 // Static championship data (TheSports API doesn't provide historical champions)
 const CHAMPIONSHIP_DATA: Record<string, {
@@ -35,18 +48,6 @@ const CHAMPIONSHIP_DATA: Record<string, {
         lastChampion: { name: 'PSG', logo: 'https://img.thesports.com/football/team/90a7c8dbb8a3c13bb4e56ac5cfa2bfa5.png', season: '2023/24' },
         mostTitles: { name: 'PSG', logo: 'https://img.thesports.com/football/team/90a7c8dbb8a3c13bb4e56ac5cfa2bfa5.png', count: 12 },
     },
-    'vl7oqdeheyr510j': { // Eredivisie
-        lastChampion: { name: 'PSV', logo: 'https://img.thesports.com/football/team/4f7f16d3ec72891bf3afd2ff2bbf4a7a.png', season: '2023/24' },
-        mostTitles: { name: 'Ajax', logo: 'https://img.thesports.com/football/team/5c8a4c6e2cf8be6c15be17e6a7c69b3a.png', count: 36 },
-    },
-    '9vjxm8ghx2r6odg': { // Primeira Liga
-        lastChampion: { name: 'Sporting CP', logo: 'https://img.thesports.com/football/team/d9f57d62f96988c1e4f50e6aad18cbcb.png', season: '2023/24' },
-        mostTitles: { name: 'Benfica', logo: 'https://img.thesports.com/football/team/c00df08e20e9e36c10f5b54d0d72a66f.png', count: 38 },
-    },
-    'l965mkyh32r1ge4': { // Championship
-        lastChampion: { name: 'Leicester City', logo: 'https://img.thesports.com/football/team/87e4df7e7e97a4e8a6e5aae7e5e5be66.png', season: '2023/24' },
-        mostTitles: { name: 'Leicester City', logo: 'https://img.thesports.com/football/team/87e4df7e7e97a4e8a6e5aae7e5e5be66.png', count: 7 },
-    },
 };
 
 // Season info per league (2024/25)
@@ -56,9 +57,6 @@ const SEASON_INFO: Record<string, { totalMatchdays: number; season: string }> = 
     'vl7oqdehlyr510j': { totalMatchdays: 38, season: '2024/25' }, // La Liga
     '4zp5rzghp5q82w1': { totalMatchdays: 38, season: '2024/25' }, // Serie A
     'yl5ergphnzr8k0o': { totalMatchdays: 34, season: '2024/25' }, // Ligue 1
-    'vl7oqdeheyr510j': { totalMatchdays: 34, season: '2024/25' }, // Eredivisie
-    '9vjxm8ghx2r6odg': { totalMatchdays: 34, season: '2024/25' }, // Primeira Liga
-    'l965mkyh32r1ge4': { totalMatchdays: 46, season: '2024/25' }, // Championship
 };
 
 export async function GET(
@@ -69,8 +67,16 @@ export async function GET(
         const { id: leagueId } = await params;
 
         // Fetch data in parallel
-        const [upcomingMatchResult, finishedMatchesResult] = await Promise.all([
-            // 1. Get next upcoming match for this league
+        const [tableResult, upcomingMatchResult, teamsResult] = await Promise.all([
+            // 1. Get live table from TheSports API
+            fetch(`${API_URL}/v1/football/table/live?user=${USERNAME}&secret=${API_KEY}`)
+                .then(r => r.json())
+                .catch(err => {
+                    console.error('Table fetch error:', err);
+                    return null;
+                }),
+
+            // 2. Get next upcoming match for this league
             supabase
                 .from('matches')
                 .select('id, home_team_name, home_team_logo, away_team_name, away_team_logo, start_time, status')
@@ -80,113 +86,73 @@ export async function GET(
                 .order('start_time', { ascending: true })
                 .limit(10),
 
-            // 2. Get finished matches to calculate standings
+            // 3. Get teams from cache for name lookup
             supabase
-                .from('matches')
-                .select('home_team_id, home_team_name, home_team_logo, away_team_id, away_team_name, away_team_logo, home_score, away_score')
-                .eq('competition_id', leagueId)
-                .eq('status', 'finished'),
+                .from('teams')
+                .select('id, name, logo')
+                .limit(5000),
         ]);
 
-        // Calculate standings from finished matches
-        type TeamStats = {
-            id: string;
-            name: string;
+        // Build team lookup map
+        const teamMap = new Map<string, { name: string; logo: string }>();
+        if (teamsResult.data) {
+            for (const team of teamsResult.data) {
+                teamMap.set(team.id, { name: team.name, logo: team.logo });
+            }
+        }
+
+        // Process standings from table/live API
+        let top3Standings: Array<{
+            position: number;
+            team: string;
             logo: string;
             played: number;
             won: number;
             drawn: number;
             lost: number;
-            goalsFor: number;
-            goalsAgainst: number;
+            goals: string;
             points: number;
-        };
-        const teamStatsMap = new Map<string, TeamStats>();
+            zone?: string;
+        }> = [];
 
-        if (finishedMatchesResult.data) {
-            for (const match of finishedMatchesResult.data) {
-                const homeId = match.home_team_id;
-                const awayId = match.away_team_id;
-                const homeScore = match.home_score ?? 0;
-                const awayScore = match.away_score ?? 0;
+        let currentMatchday = 1;
+        const seasonInfo = SEASON_INFO[leagueId] || { totalMatchdays: 34, season: '2024/25' };
 
-                // Initialize teams if not exist
-                if (!teamStatsMap.has(homeId)) {
-                    teamStatsMap.set(homeId, {
-                        id: homeId,
-                        name: match.home_team_name || 'Unknown',
-                        logo: match.home_team_logo || '',
-                        played: 0, won: 0, drawn: 0, lost: 0,
-                        goalsFor: 0, goalsAgainst: 0, points: 0,
-                    });
-                }
-                if (!teamStatsMap.has(awayId)) {
-                    teamStatsMap.set(awayId, {
-                        id: awayId,
-                        name: match.away_team_name || 'Unknown',
-                        logo: match.away_team_logo || '',
-                        played: 0, won: 0, drawn: 0, lost: 0,
-                        goalsFor: 0, goalsAgainst: 0, points: 0,
-                    });
+        if (tableResult?.data && Array.isArray(tableResult.data)) {
+            // Find the table for our league's season
+            const seasonId = SEASON_IDS[leagueId];
+            const tableEntry = tableResult.data.find((t: any) => t.season_id === seasonId);
+
+            if (tableEntry?.tables?.[0]?.rows) {
+                const rows = tableEntry.tables[0].rows;
+
+                // Calculate current matchday from first team's total games
+                if (rows.length > 0) {
+                    currentMatchday = Math.max(rows[0].total || 1, 1);
                 }
 
-                const homeStats = teamStatsMap.get(homeId)!;
-                const awayStats = teamStatsMap.get(awayId)!;
-
-                // Update stats
-                homeStats.played++;
-                awayStats.played++;
-                homeStats.goalsFor += homeScore;
-                homeStats.goalsAgainst += awayScore;
-                awayStats.goalsFor += awayScore;
-                awayStats.goalsAgainst += homeScore;
-
-                if (homeScore > awayScore) {
-                    homeStats.won++;
-                    homeStats.points += 3;
-                    awayStats.lost++;
-                } else if (homeScore < awayScore) {
-                    awayStats.won++;
-                    awayStats.points += 3;
-                    homeStats.lost++;
-                } else {
-                    homeStats.drawn++;
-                    awayStats.drawn++;
-                    homeStats.points += 1;
-                    awayStats.points += 1;
-                }
+                // Get top 3 standings
+                top3Standings = rows.slice(0, 3).map((row: any, idx: number) => {
+                    const teamInfo = teamMap.get(row.team_id) || { name: `Team ${idx + 1}`, logo: '' };
+                    return {
+                        position: row.position || idx + 1,
+                        team: teamInfo.name,
+                        logo: teamInfo.logo,
+                        played: row.total || 0,
+                        won: row.won || 0,
+                        drawn: row.draw || 0,
+                        lost: row.loss || 0,
+                        goals: `${row.goals || 0}:${row.goals_against || 0}`,
+                        points: row.points || 0,
+                        zone: idx < 4 ? 'cl' : undefined,
+                    };
+                });
             }
         }
 
-        // Sort by points, then goal difference, then goals scored
-        const sortedStandings = Array.from(teamStatsMap.values())
-            .sort((a, b) => {
-                const gdA = a.goalsFor - a.goalsAgainst;
-                const gdB = b.goalsFor - b.goalsAgainst;
-                if (b.points !== a.points) return b.points - a.points;
-                if (gdB !== gdA) return gdB - gdA;
-                return b.goalsFor - a.goalsFor;
-            });
-
-        // Get top 3
-        const top3Standings = sortedStandings.slice(0, 3).map((s, idx) => ({
-            position: idx + 1,
-            team: s.name,
-            logo: s.logo,
-            played: s.played,
-            won: s.won,
-            drawn: s.drawn,
-            lost: s.lost,
-            goals: `${s.goalsFor}:${s.goalsAgainst}`,
-            points: s.points,
-            zone: idx < 4 ? 'cl' : undefined, // Top 4 = Champions League zone
-        }));
-
-        // Find top match (highest-ranked teams playing each other)
+        // Find top match (first upcoming match)
         let topMatch = null;
         if (upcomingMatchResult.data && upcomingMatchResult.data.length > 0) {
-            // For now, just take the first upcoming match
-            // In a more sophisticated version, we'd rank by team positions
             const match = upcomingMatchResult.data[0];
             const matchDate = new Date(match.start_time);
             topMatch = {
@@ -204,16 +170,6 @@ export async function GET(
             };
         }
 
-        // Calculate season progress
-        const seasonInfo = SEASON_INFO[leagueId] || { totalMatchdays: 34, season: '2024/25' };
-        const teamsCount = sortedStandings.length || 18;
-        const matchesPerMatchday = teamsCount / 2;
-        const finishedMatches = finishedMatchesResult.data?.length || 0;
-        const currentMatchday = Math.min(
-            Math.ceil(finishedMatches / matchesPerMatchday) + 1,
-            seasonInfo.totalMatchdays
-        );
-
         // Get championship data
         const championships = CHAMPIONSHIP_DATA[leagueId] || null;
 
@@ -224,7 +180,7 @@ export async function GET(
                     season: seasonInfo.season,
                     currentMatchday,
                     totalMatchdays: seasonInfo.totalMatchdays,
-                    teamsCount,
+                    teamsCount: top3Standings.length > 0 ? top3Standings.length : 18,
                     progressPercent: Math.round((currentMatchday / seasonInfo.totalMatchdays) * 100),
                 },
                 standings: top3Standings,
