@@ -45,8 +45,8 @@ export async function GET() {
         // Format as a ready-to-use object
         const seasonIds: Record<string, string> = {};
         for (const comp of results) {
-            if (comp.cur_season_id) {
-                seasonIds[comp.id] = comp.cur_season_id;
+            if (comp.season_id) {
+                seasonIds[comp.id] = comp.season_id;
             }
         }
 
