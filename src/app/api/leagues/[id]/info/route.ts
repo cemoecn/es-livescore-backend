@@ -14,16 +14,6 @@ const API_URL = process.env.THESPORTS_API_URL || 'https://api.thesports.com';
 const API_KEY = process.env.THESPORTS_API_KEY || '';
 const USERNAME = process.env.THESPORTS_USERNAME || '';
 
-// Map competition IDs to their current season IDs
-// Note: table/live API returns limited entries - we iterate to find matching team counts
-const SEASON_IDS: Record<string, string> = {
-    'gy0or5jhg6qwzv3': 'e4wyrn4hgxyq86p', // Bundesliga 2024/25 (from test - 18 teams)
-    'jednm9whz0ryox8': 'e4wyrn4hgxyq86p', // Premier League 2024/25 (20 teams - different)
-    'vl7oqdehlyr510j': 'kdj2ryohd0yq1zp', // La Liga 2024/25
-    '4zp5rzghp5q82w1': 'n4kq71ghx7lq5dm', // Serie A 2024/25
-    'yl5ergphnzr8k0o': '7l6jm04h0lq3ozn', // Ligue 1 2024/25
-};
-
 // Static championship data (TheSports API doesn't provide historical champions)
 const CHAMPIONSHIP_DATA: Record<string, {
     lastChampion: { name: string; logo: string; season: string };
@@ -66,19 +56,16 @@ export async function GET(
 ) {
     try {
         const { id: leagueId } = await params;
-        const seasonId = SEASON_IDS[leagueId];
 
         // Fetch data in parallel
-        const [tableResult, upcomingMatchResult, teamsResult] = await Promise.all([
-            // 1. Get season table from TheSports API with uuid parameter
-            seasonId
-                ? fetch(`${API_URL}/v1/football/season/recent/table/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${seasonId}`)
-                    .then(r => r.json())
-                    .catch(err => {
-                        console.error('Table fetch error:', err);
-                        return null;
-                    })
-                : Promise.resolve(null),
+        const [tableResult, upcomingMatchResult, teamsResult, leagueTeamsResult] = await Promise.all([
+            // 1. Get all live tables from TheSports API
+            fetch(`${API_URL}/v1/football/table/live?user=${USERNAME}&secret=${API_KEY}`)
+                .then(r => r.json())
+                .catch(err => {
+                    console.error('Table fetch error:', err);
+                    return null;
+                }),
 
             // 2. Get next upcoming match for this league
             supabase
@@ -95,6 +82,13 @@ export async function GET(
                 .from('teams')
                 .select('id, name, logo')
                 .limit(5000),
+
+            // 4. Get unique team IDs from matches for this league (to identify correct table)
+            supabase
+                .from('matches')
+                .select('home_team_id, away_team_id')
+                .eq('competition_id', leagueId)
+                .limit(100),
         ]);
 
         // Build team lookup map
@@ -105,8 +99,16 @@ export async function GET(
             }
         }
 
-        // Process standings from season/table API
-        // Response structure: { code, results: { promotions, tables: [{ rows: [...] }] } }
+        // Extract unique team IDs for this league from matches
+        const leagueTeamIds = new Set<string>();
+        if (leagueTeamsResult.data) {
+            for (const match of leagueTeamsResult.data) {
+                if (match.home_team_id) leagueTeamIds.add(match.home_team_id);
+                if (match.away_team_id) leagueTeamIds.add(match.away_team_id);
+            }
+        }
+
+        // Process standings - find the table that matches our league's teams
         let top3Standings: Array<{
             position: number;
             team: string;
@@ -123,32 +125,54 @@ export async function GET(
         let currentMatchday = 1;
         const seasonInfo = SEASON_INFO[leagueId] || { totalMatchdays: 34, season: '2024/25' };
 
-        // Parse the results from season/recent/table/detail
-        const tableData = tableResult?.results || tableResult?.data;
-        if (tableData?.tables?.[0]?.rows) {
-            const rows = tableData.tables[0].rows;
+        // Find the matching table from table/live response
+        if (tableResult?.data && Array.isArray(tableResult.data) && leagueTeamIds.size > 0) {
+            // Iterate through all tables and find the one with highest team overlap
+            let bestMatch: { rows: any[]; matchCount: number } | null = null;
 
-            // Calculate current matchday from first team's total games
-            if (rows.length > 0) {
-                currentMatchday = Math.max(rows[0].total || 1, 1);
+            for (const tableEntry of tableResult.data) {
+                if (!tableEntry.tables?.[0]?.rows) continue;
+
+                const rows = tableEntry.tables[0].rows;
+                const tableTeamIds = new Set(rows.map((r: any) => r.team_id));
+
+                // Count how many of our league's teams are in this table
+                let matchCount = 0;
+                for (const teamId of leagueTeamIds) {
+                    if (tableTeamIds.has(teamId)) matchCount++;
+                }
+
+                // If we have significant overlap (at least 5 matching teams), this is likely our table
+                if (matchCount >= 5 && (!bestMatch || matchCount > bestMatch.matchCount)) {
+                    bestMatch = { rows, matchCount };
+                }
             }
 
-            // Get top 3 standings
-            top3Standings = rows.slice(0, 3).map((row: any, idx: number) => {
-                const teamInfo = teamMap.get(row.team_id) || { name: `Team ${idx + 1}`, logo: '' };
-                return {
-                    position: row.position || idx + 1,
-                    team: teamInfo.name,
-                    logo: teamInfo.logo,
-                    played: row.total || 0,
-                    won: row.won || 0,
-                    drawn: row.draw || 0,
-                    lost: row.loss || 0,
-                    goals: `${row.goals || 0}:${row.goals_against || 0}`,
-                    points: row.points || 0,
-                    zone: idx < 4 ? 'cl' : undefined,
-                };
-            });
+            if (bestMatch) {
+                const rows = bestMatch.rows;
+
+                // Calculate current matchday from first team's total games
+                if (rows.length > 0) {
+                    currentMatchday = Math.max(rows[0].total || 1, 1);
+                }
+
+                // Get top 3 standings
+                top3Standings = rows.slice(0, 3).map((row: any, idx: number) => {
+                    const teamInfo = teamMap.get(row.team_id) || { name: `Team ${idx + 1}`, logo: '' };
+                    return {
+                        position: row.position || idx + 1,
+                        team: teamInfo.name,
+                        logo: teamInfo.logo,
+                        played: row.total || 0,
+                        won: row.won || 0,
+                        drawn: row.draw || 0,
+                        lost: row.loss || 0,
+                        goals: `${row.goals || 0}:${row.goals_against || 0}`,
+                        points: row.points || 0,
+                        zone: idx < 4 ? 'cl' : undefined,
+                    };
+                });
+            }
         }
 
         // Find top match (first upcoming match)
@@ -181,12 +205,16 @@ export async function GET(
                     season: seasonInfo.season,
                     currentMatchday,
                     totalMatchdays: seasonInfo.totalMatchdays,
-                    teamsCount: top3Standings.length > 0 ? top3Standings.length : 18,
+                    teamsCount: leagueTeamIds.size || 18,
                     progressPercent: Math.round((currentMatchday / seasonInfo.totalMatchdays) * 100),
                 },
                 standings: top3Standings,
                 topMatch,
                 championships,
+            },
+            debug: {
+                leagueTeamCount: leagueTeamIds.size,
+                tablesChecked: tableResult?.data?.length || 0,
             },
             timestamp: new Date().toISOString(),
         });
