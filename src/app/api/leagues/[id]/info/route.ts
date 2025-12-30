@@ -126,11 +126,21 @@ export async function GET(
         const seasonInfo = SEASON_INFO[leagueId] || { totalMatchdays: 34, season: '2024/25' };
 
         // Find the matching table from table/live response
-        if (tableResult?.data && Array.isArray(tableResult.data) && leagueTeamIds.size > 0) {
+        let tablesChecked = 0;
+        let dataArrayIsArray = false;
+        let dataArrayLength = 0;
+
+        // Check if data is in the expected format
+        const tableDataArray = tableResult?.data || tableResult?.results || [];
+        dataArrayIsArray = Array.isArray(tableDataArray);
+        dataArrayLength = dataArrayIsArray ? tableDataArray.length : 0;
+
+        if (dataArrayIsArray && dataArrayLength > 0 && leagueTeamIds.size > 0) {
             // Iterate through all tables and find the one with highest team overlap
             let bestMatch: { rows: any[]; matchCount: number } | null = null;
 
-            for (const tableEntry of tableResult.data) {
+            for (const tableEntry of tableDataArray) {
+                tablesChecked++;
                 if (!tableEntry.tables?.[0]?.rows) continue;
 
                 const rows = tableEntry.tables[0].rows;
@@ -214,7 +224,9 @@ export async function GET(
             },
             debug: {
                 leagueTeamCount: leagueTeamIds.size,
-                tablesChecked: tableResult?.data?.length || 0,
+                tablesChecked,
+                dataArrayIsArray,
+                dataArrayLength,
             },
             timestamp: new Date().toISOString(),
         });
