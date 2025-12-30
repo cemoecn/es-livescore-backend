@@ -17,11 +17,11 @@ const USERNAME = process.env.THESPORTS_USERNAME || '';
 // Current 2024/25 season IDs mapped by competition_id
 // These are verified to work with /v1/football/season/recent/table/detail
 const CURRENT_SEASON_IDS: Record<string, string> = {
-    'gy0or5jhg6qwzv3': 'e4wyrn4hgxyq86p', // Bundesliga 2024/25 - 18 teams
-    'jednm9whz0ryox8': 'l965mkyhjpxr1ge', // Premier League 2024/25 - 20 teams
+    'gy0or5jhg6qwzv3': 'e4wyrn4hg8gq86p', // Bundesliga 2024/25 - cur_round: 16, 18 teams, 41pts leader
+    'jednm9whz0ryox8': 'l965mkyhjpxr1ge', // Premier League 2024/25 - 20 teams, 45pts leader
     'vl7oqdehlyr510j': 'l965mkyhjpxr1ge', // La Liga 2024/25 (temp - need to find correct)
     '4zp5rzghp5q82w1': 'l965mkyhjpxr1ge', // Serie A 2024/25 (temp - need to find correct)
-    'yl5ergphnzr8k0o': 'e4wyrn4hgxyq86p', // Ligue 1 2024/25 (temp - need to find correct)
+    'yl5ergphnzr8k0o': 'e4wyrn4hg8gq86p', // Ligue 1 2024/25 (temp - need to find correct)
 };
 
 // Season info per league (2024/25)
