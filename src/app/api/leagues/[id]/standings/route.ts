@@ -12,6 +12,11 @@ const API_URL = process.env.THESPORTS_API_URL || 'https://api.thesports.com';
 const API_KEY = process.env.THESPORTS_API_KEY || '';
 const USERNAME = process.env.THESPORTS_USERNAME || '';
 
+// Hardcoded fallback for season IDs if API fails
+const SEASON_ID_MAP: Record<string, string> = {
+    // 'gy0or5jhg6qwzv3': '...', // Add if found manually
+};
+
 export async function GET(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -19,68 +24,149 @@ export async function GET(
     try {
         const { id: leagueId } = await params;
 
-        // Step 1: Get competition details to find cur_season_id
-        const compResponse = await fetch(
-            `${API_URL}/v1/football/competition/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${leagueId}`
-        );
-        const compData = await compResponse.json();
+        let curSeasonId: string | undefined = SEASON_ID_MAP[leagueId];
+        let curRound: string | undefined;
+        let standingsRows: any[] = [];
+        let source = 'unknown';
 
-        const competition = compData.results || compData.data;
-        const curSeasonId = competition?.cur_season_id;
-        const curRound = competition?.cur_round;
-
+        // Step 1: Try to get competition details (if not hardcoded)
         if (!curSeasonId) {
+            try {
+                const compResponse = await fetch(
+                    `${API_URL}/v1/football/competition/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${leagueId}`
+                );
+                const compData = await compResponse.json();
+
+                const competition = compData.results || compData.data;
+                // Check if we got valid data or error
+                if (competition && competition.cur_season_id) {
+                    curSeasonId = competition.cur_season_id;
+                    curRound = competition.cur_round;
+                } else {
+                    console.warn(`[Standings] Competition detail request failed or empty for ${leagueId}:`, JSON.stringify(compData).slice(0, 100));
+                }
+            } catch (e) {
+                console.warn(`[Standings] Exception fetching competition detail: ${e}`);
+            }
+        }
+
+        // Step 2: If we have a Season ID, fetch full table
+        if (curSeasonId) {
+            try {
+                console.log(`[Standings] Fetching table for season ${curSeasonId}`);
+                const tableResponse = await fetch(
+                    `${API_URL}/v1/football/season/recent/table/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${curSeasonId}`
+                );
+                const tableData = await tableResponse.json();
+
+                // Parse response (can be array or object depending on endpoint version/doc)
+                // usually: results -> { tables: [ { rows: [] } ] } or results -> [ { rows: [] } ]
+                const result = tableData.results || tableData.data;
+
+                if (Array.isArray(result)) {
+                    standingsRows = result[0]?.rows || [];
+                } else if (result?.tables) {
+                    standingsRows = result.tables[0]?.rows || [];
+                } else if (result?.rows) {
+                    standingsRows = result.rows;
+                }
+
+                if (standingsRows.length > 0) source = 'season_table';
+            } catch (e) {
+                console.warn(`[Standings] Exception fetching season table: ${e}`);
+            }
+        }
+
+        // Step 3: Fallback - Try Live Table if we still have no rows
+        if (standingsRows.length === 0) {
+            console.log(`[Standings] Fallback to /table/live for ${leagueId}`);
+            try {
+                const liveResponse = await fetch(
+                    `${API_URL}/v1/football/table/live?user=${USERNAME}&secret=${API_KEY}&competition_id=${leagueId}`
+                );
+                const liveData = await liveResponse.json();
+                const tables = liveData.results || liveData.data || [];
+
+                // Usually returns array of tables (e.g. for different groups), take first for league
+                if (Array.isArray(tables) && tables.length > 0) {
+                    standingsRows = tables[0]?.rows || [];
+                    if (!curSeasonId && tables[0]?.season_id) {
+                        curSeasonId = tables[0].season_id;
+                    }
+                }
+                if (standingsRows.length > 0) source = 'live_table';
+            } catch (e) {
+                console.warn(`[Standings] Exception fetching live table: ${e}`);
+            }
+        }
+
+        if (standingsRows.length === 0) {
             return NextResponse.json({
                 success: false,
-                error: 'Could not find current season for this competition',
-                debug: { compData: JSON.stringify(compData).slice(0, 500) },
+                error: 'Could not find standings (auth error or no data)',
+                debug: { leagueId, curSeasonId, source }
             }, { status: 404 });
         }
 
-        // Step 2: Get table for current season
-        const tableResponse = await fetch(
-            `${API_URL}/v1/football/season/recent/table/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${curSeasonId}`
-        );
-        const tableData = await tableResponse.json();
+        // Step 4: Enrich with Supabase Team Data
+        // Collect team IDs (map from potential field names)
+        const teamIds = standingsRows.map((r: any) => r.team_id || r.team?.id).filter(Boolean);
 
-        // Get team names from Supabase
-        const { data: teams } = await supabase.from('teams').select('id, name, logo');
-        const teamMap = new Map(teams?.map(t => [t.id, { name: t.name, logo: t.logo }]) || []);
+        let teamMap = new Map<string, { name: string, logo: string }>();
+        if (teamIds.length > 0) {
+            const { data: teams } = await supabase
+                .from('teams')
+                .select('id, name, logo')
+                .in('id', teamIds);
 
-        // Process standings
-        const tableResults = tableData.results;
-        const rows = tableResults?.tables?.[0]?.rows || [];
+            teams?.forEach(t => teamMap.set(t.id, t));
+        }
 
-        // Map all standings (full table)
-        const standings = rows.map((row: any, idx: number) => {
-            const teamInfo = teamMap.get(row.team_id);
+        // Step 5: Format Response
+        const standings = standingsRows.map((row: any, idx: number) => {
+            const teamId = row.team_id || row.team?.id;
+            const teamInfo = teamMap.get(teamId);
+
+            // Handle various field names from different APIs
+            const position = row.position || idx + 1;
+            const played = row.total || row.matches_total || row.played || 0;
+            const won = row.won || row.matches_won || 0;
+            const drawn = row.draw || row.matches_draw || 0;
+            const lost = row.loss || row.matches_lost || 0;
+            const goalsFor = row.goals || row.goals_pro || row.goals_for || 0;
+            const goalsAgainst = row.goals_against || 0;
+            const points = row.points || 0;
+
             return {
-                position: row.position || idx + 1,
-                team_id: row.team_id,
-                team: teamInfo?.name || `Team ${row.team_id?.slice(0, 8)}`,
-                logo: teamInfo?.logo || '',
-                played: row.total || 0,
-                won: row.won || 0,
-                drawn: row.draw || 0,
-                lost: row.loss || 0,
-                goalsFor: row.goals || 0,
-                goalsAgainst: row.goals_against || 0,
-                goalDiff: (row.goals || 0) - (row.goals_against || 0),
-                points: row.points || 0,
-                zone: getZone(row.position || idx + 1, rows.length),
+                position,
+                team_id: teamId,
+                team: teamInfo?.name || row.team_name || (row.team ? row.team.name : `Team ${teamId}`),
+                logo: teamInfo?.logo || row.team_logo || (row.team ? row.team.logo : ''),
+                played,
+                won,
+                drawn,
+                lost,
+                goalsFor,
+                goalsAgainst,
+                goalDiff: goalsFor - goalsAgainst,
+                points,
+                zone: getZone(position, standingsRows.length),
             };
         });
+
+        // Sort just in case
+        standings.sort((a: any, b: any) => a.position - b.position);
 
         return NextResponse.json({
             success: true,
             data: {
                 competition_id: leagueId,
-                season_id: curSeasonId,
-                current_round: curRound,
-                matchday: rows[0]?.total || curRound || 0,
+                season_id: curSeasonId || 'unknown',
+                source,
                 standings,
             },
         });
+
     } catch (error) {
         console.error('Error fetching standings:', error);
         return NextResponse.json(
