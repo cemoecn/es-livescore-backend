@@ -166,6 +166,12 @@ export async function GET(
             };
         });
 
+        // Collect all team_ids for debugging missing mappings
+        const allTeamIds = rows.map((row: any) => ({
+            position: row.position,
+            team_id: row.team_id,
+        }));
+
         return NextResponse.json({
             success: true,
             data: {
@@ -173,6 +179,9 @@ export async function GET(
                 seasonId,
                 teamsCount: standings.length,
                 fetchedFromApi: missingTeamIds.length,
+            },
+            debug: {
+                allTeamIds,
             },
             timestamp: new Date().toISOString(),
         });
