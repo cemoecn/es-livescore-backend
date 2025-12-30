@@ -69,8 +69,9 @@ export async function GET(
 
         // Fetch data in parallel
         const [tableResult, upcomingMatchResult, teamsResult] = await Promise.all([
-            // 1. Get live table from TheSports API
-            fetch(`${API_URL}/v1/football/table/live?user=${USERNAME}&secret=${API_KEY}`)
+            // 1. Get season tables from TheSports API
+            // Using season/recent/table/detail which has more leagues than table/live
+            fetch(`${API_URL}/v1/football/season/recent/table/detail?user=${USERNAME}&secret=${API_KEY}`)
                 .then(r => r.json())
                 .catch(err => {
                     console.error('Table fetch error:', err);
