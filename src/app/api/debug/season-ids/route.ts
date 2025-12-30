@@ -24,18 +24,30 @@ export async function GET() {
 
         for (const compId of TOP_LEAGUE_IDS) {
             try {
+                // Use season/list to get all seasons for this competition
                 const response = await fetch(
-                    `${API_URL}/v1/football/competition/page?user=${USERNAME}&secret=${API_KEY}&uuid=${compId}`
+                    `${API_URL}/v1/football/season/list?user=${USERNAME}&secret=${API_KEY}&competition_id=${compId}`
                 );
                 const data = await response.json();
 
-                if (data.results) {
+                // Get seasons array
+                const seasons = data.results || data.data || [];
+
+                // Sort by year descending to get latest season
+                const sortedSeasons = [...seasons].sort((a: any, b: any) =>
+                    parseInt(b.year || '0') - parseInt(a.year || '0')
+                );
+
+                const currentSeason = sortedSeasons[0];
+
+                if (currentSeason) {
                     results.push({
                         id: compId,
-                        name: data.results.name,
-                        cur_season_id: data.results.cur_season_id,
-                        cur_round: data.results.cur_round,
+                        season_id: currentSeason.id,
+                        year: currentSeason.year,
                     });
+                } else {
+                    results.push({ id: compId, error: 'No seasons found', rawCount: seasons.length });
                 }
             } catch (e) {
                 results.push({ id: compId, error: String(e) });
