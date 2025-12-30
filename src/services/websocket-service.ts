@@ -47,9 +47,12 @@ interface MqttIncidentUpdate {
     out_player_name?: string;
     home_score?: number;
     away_score?: number;
+    // Assist fields (for goals)
+    assist1_id?: string;
+    assist1_name?: string;
     // VAR-specific fields (only for type 28)
-    var_reason?: number;  // 1=Goal awarded, 2=Goal not awarded, 3=Penalty awarded, etc.
-    var_result?: number;  // 1=Goal confirmed, 2=Goal cancelled, 3=Penalty confirmed, etc.
+    var_reason?: number;
+    var_result?: number;
 }
 
 // Stats format from WebSocket: { type, home, away }
@@ -310,6 +313,9 @@ async function handleIncidentsMessage(matchId: string, incidents: MqttIncidentUp
             out_player_name: incident.out_player_name ?? null,
             home_score: incident.home_score ?? null,
             away_score: incident.away_score ?? null,
+            // Assist fields
+            assist1_id: incident.assist1_id ?? null,
+            assist1_name: incident.assist1_name ?? null,
             // VAR-specific fields
             var_reason: incident.var_reason ?? null,
             var_result: incident.var_result ?? null,

@@ -63,6 +63,8 @@ export async function GET(
                 out_player_name: e.out_player_name,
                 home_score: e.home_score,
                 away_score: e.away_score,
+                // Assist fields
+                assist1_name: e.assist1_name,
                 // VAR-specific fields
                 var_reason: e.var_reason,
                 var_result: e.var_result,
