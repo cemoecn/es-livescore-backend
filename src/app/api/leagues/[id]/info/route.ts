@@ -14,10 +14,11 @@ const API_URL = process.env.THESPORTS_API_URL || 'https://api.thesports.com';
 const API_KEY = process.env.THESPORTS_API_KEY || '';
 const USERNAME = process.env.THESPORTS_USERNAME || '';
 
-// Map competition IDs to their current season IDs (will need periodic updates)
+// Map competition IDs to their current season IDs
+// Note: table/live API returns limited entries - we iterate to find matching team counts
 const SEASON_IDS: Record<string, string> = {
-    'gy0or5jhg6qwzv3': '7l6jm04h2kq3ozn', // Bundesliga 2024/25
-    'jednm9whz0ryox8': 'e4wyrn4hgxyq86p', // Premier League 2024/25
+    'gy0or5jhg6qwzv3': 'e4wyrn4hgxyq86p', // Bundesliga 2024/25 (from test - 18 teams)
+    'jednm9whz0ryox8': 'e4wyrn4hgxyq86p', // Premier League 2024/25 (20 teams - different)
     'vl7oqdehlyr510j': 'kdj2ryohd0yq1zp', // La Liga 2024/25
     '4zp5rzghp5q82w1': 'n4kq71ghx7lq5dm', // Serie A 2024/25
     'yl5ergphnzr8k0o': '7l6jm04h0lq3ozn', // Ligue 1 2024/25
