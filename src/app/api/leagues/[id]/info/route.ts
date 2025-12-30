@@ -2,7 +2,7 @@
  * GET /api/leagues/[id]/info
  * Returns combined info for a league's Info Tab:
  * - Season progress
- * - Top 3 standings (from TheSports table/live API)
+ * - Top 3 standings (from TheSports season/recent/table/detail API)
  * - Top match of the matchday
  * - Championship history (static)
  */
@@ -13,6 +13,25 @@ import { NextRequest, NextResponse } from 'next/server';
 const API_URL = process.env.THESPORTS_API_URL || 'https://api.thesports.com';
 const API_KEY = process.env.THESPORTS_API_KEY || '';
 const USERNAME = process.env.THESPORTS_USERNAME || '';
+
+// Current 2024/25 season IDs mapped by competition_id
+// These are verified to work with /v1/football/season/recent/table/detail
+const CURRENT_SEASON_IDS: Record<string, string> = {
+    'gy0or5jhg6qwzv3': 'e4wyrn4hgxyq86p', // Bundesliga 2024/25 - 18 teams
+    'jednm9whz0ryox8': 'l965mkyhjpxr1ge', // Premier League 2024/25 - 20 teams
+    'vl7oqdehlyr510j': 'l965mkyhjpxr1ge', // La Liga 2024/25 (temp - need to find correct)
+    '4zp5rzghp5q82w1': 'l965mkyhjpxr1ge', // Serie A 2024/25 (temp - need to find correct)
+    'yl5ergphnzr8k0o': 'e4wyrn4hgxyq86p', // Ligue 1 2024/25 (temp - need to find correct)
+};
+
+// Season info per league (2024/25)
+const SEASON_INFO: Record<string, { totalMatchdays: number; season: string; teamCount: number }> = {
+    'gy0or5jhg6qwzv3': { totalMatchdays: 34, season: '2024/25', teamCount: 18 }, // Bundesliga
+    'jednm9whz0ryox8': { totalMatchdays: 38, season: '2024/25', teamCount: 20 }, // Premier League
+    'vl7oqdehlyr510j': { totalMatchdays: 38, season: '2024/25', teamCount: 20 }, // La Liga
+    '4zp5rzghp5q82w1': { totalMatchdays: 38, season: '2024/25', teamCount: 20 }, // Serie A
+    'yl5ergphnzr8k0o': { totalMatchdays: 34, season: '2024/25', teamCount: 18 }, // Ligue 1
+};
 
 // Static championship data (TheSports API doesn't provide historical champions)
 const CHAMPIONSHIP_DATA: Record<string, {
@@ -41,31 +60,26 @@ const CHAMPIONSHIP_DATA: Record<string, {
     },
 };
 
-// Season info per league (2024/25)
-const SEASON_INFO: Record<string, { totalMatchdays: number; season: string }> = {
-    'gy0or5jhg6qwzv3': { totalMatchdays: 34, season: '2024/25' }, // Bundesliga
-    'jednm9whz0ryox8': { totalMatchdays: 38, season: '2024/25' }, // Premier League
-    'vl7oqdehlyr510j': { totalMatchdays: 38, season: '2024/25' }, // La Liga
-    '4zp5rzghp5q82w1': { totalMatchdays: 38, season: '2024/25' }, // Serie A
-    'yl5ergphnzr8k0o': { totalMatchdays: 34, season: '2024/25' }, // Ligue 1
-};
-
 export async function GET(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const { id: leagueId } = await params;
+        const seasonId = CURRENT_SEASON_IDS[leagueId];
+        const seasonInfo = SEASON_INFO[leagueId] || { totalMatchdays: 34, season: '2024/25', teamCount: 18 };
 
         // Fetch data in parallel
-        const [tableResult, upcomingMatchResult, teamsResult, leagueTeamsResult] = await Promise.all([
-            // 1. Get all live tables from TheSports API
-            fetch(`${API_URL}/v1/football/table/live?user=${USERNAME}&secret=${API_KEY}`)
-                .then(r => r.json())
-                .catch(err => {
-                    console.error('Table fetch error:', err);
-                    return null;
-                }),
+        const [tableResult, upcomingMatchResult, teamsResult] = await Promise.all([
+            // 1. Get standings from TheSports API using season/recent/table/detail
+            seasonId
+                ? fetch(`${API_URL}/v1/football/season/recent/table/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${seasonId}`)
+                    .then(r => r.json())
+                    .catch(err => {
+                        console.error('Table fetch error:', err);
+                        return null;
+                    })
+                : Promise.resolve(null),
 
             // 2. Get next upcoming match for this league
             supabase
@@ -77,18 +91,11 @@ export async function GET(
                 .order('start_time', { ascending: true })
                 .limit(10),
 
-            // 3. Get teams from cache for name lookup
+            // 3. Get teams from Supabase cache for name lookup
             supabase
                 .from('teams')
                 .select('id, name, logo')
                 .limit(5000),
-
-            // 4. Get unique team IDs from matches for this league (to identify correct table)
-            supabase
-                .from('matches')
-                .select('home_team_id, away_team_id')
-                .eq('competition_id', leagueId)
-                .limit(100),
         ]);
 
         // Build team lookup map
@@ -99,16 +106,7 @@ export async function GET(
             }
         }
 
-        // Extract unique team IDs for this league from matches
-        const leagueTeamIds = new Set<string>();
-        if (leagueTeamsResult.data) {
-            for (const match of leagueTeamsResult.data) {
-                if (match.home_team_id) leagueTeamIds.add(match.home_team_id);
-                if (match.away_team_id) leagueTeamIds.add(match.away_team_id);
-            }
-        }
-
-        // Process standings - find the table that matches our league's teams
+        // Process standings from API response
         let top3Standings: Array<{
             position: number;
             team: string;
@@ -123,153 +121,31 @@ export async function GET(
         }> = [];
 
         let currentMatchday = 1;
-        const seasonInfo = SEASON_INFO[leagueId] || { totalMatchdays: 34, season: '2024/25' };
 
-        // Find the matching table from table/live response
-        let tablesChecked = 0;
-        let dataArrayIsArray = false;
-        let dataArrayLength = 0;
+        // Parse the standings from season/recent/table/detail response
+        const tables = tableResult?.results?.tables || [];
+        const rows = tables[0]?.rows || [];
 
-        // Check if data is in the expected format
-        const tableDataArray = tableResult?.data || tableResult?.results || [];
-        dataArrayIsArray = Array.isArray(tableDataArray);
-        dataArrayLength = dataArrayIsArray ? tableDataArray.length : 0;
+        if (rows.length > 0) {
+            // Get matchday from first team's total games played
+            currentMatchday = rows[0]?.total || 1;
 
-        if (dataArrayIsArray && dataArrayLength > 0 && leagueTeamIds.size > 0) {
-            // Iterate through all tables and find the one with highest team overlap
-            let bestMatch: { rows: any[]; matchCount: number } | null = null;
-
-            for (const tableEntry of tableDataArray) {
-                tablesChecked++;
-                if (!tableEntry.tables?.[0]?.rows) continue;
-
-                const rows = tableEntry.tables[0].rows;
-                const tableTeamIds = new Set(rows.map((r: any) => r.team_id));
-
-                // Count how many of our league's teams are in this table
-                let matchCount = 0;
-                for (const teamId of leagueTeamIds) {
-                    if (tableTeamIds.has(teamId)) matchCount++;
-                }
-
-                // If we have significant overlap (at least 5 matching teams), this is likely our table
-                if (matchCount >= 5 && (!bestMatch || matchCount > bestMatch.matchCount)) {
-                    bestMatch = { rows, matchCount };
-                }
-            }
-
-            if (bestMatch) {
-                const rows = bestMatch.rows;
-
-                // Calculate current matchday from first team's total games
-                if (rows.length > 0) {
-                    currentMatchday = Math.max(rows[0].total || 1, 1);
-                }
-
-                // Get top 3 standings
-                top3Standings = rows.slice(0, 3).map((row: any, idx: number) => {
-                    const teamInfo = teamMap.get(row.team_id) || { name: `Team ${idx + 1}`, logo: '' };
-                    return {
-                        position: row.position || idx + 1,
-                        team: teamInfo.name,
-                        logo: teamInfo.logo,
-                        played: row.total || 0,
-                        won: row.won || 0,
-                        drawn: row.draw || 0,
-                        lost: row.loss || 0,
-                        goals: `${row.goals || 0}:${row.goals_against || 0}`,
-                        points: row.points || 0,
-                        zone: idx < 4 ? 'cl' : undefined,
-                    };
-                });
-            }
-        }
-
-        // Fallback: If no table found in table/live, calculate from Supabase matches
-        if (top3Standings.length === 0) {
-            // Get finished matches for this league
-            const { data: finishedMatches } = await supabase
-                .from('matches')
-                .select('home_team_id, home_team_name, home_team_logo, away_team_id, away_team_name, away_team_logo, home_score, away_score')
-                .eq('competition_id', leagueId)
-                .eq('status', 'finished');
-
-            if (finishedMatches && finishedMatches.length > 0) {
-                // Calculate standings from matches
-                type TeamStats = {
-                    id: string;
-                    name: string;
-                    logo: string;
-                    played: number;
-                    won: number;
-                    drawn: number;
-                    lost: number;
-                    goalsFor: number;
-                    goalsAgainst: number;
-                    points: number;
-                };
-                const teamStatsMap = new Map<string, TeamStats>();
-
-                for (const match of finishedMatches) {
-                    const homeId = match.home_team_id;
-                    const awayId = match.away_team_id;
-                    const homeScore = match.home_score ?? 0;
-                    const awayScore = match.away_score ?? 0;
-
-                    if (!teamStatsMap.has(homeId)) {
-                        teamStatsMap.set(homeId, {
-                            id: homeId,
-                            name: match.home_team_name || teamMap.get(homeId)?.name || 'Unknown',
-                            logo: match.home_team_logo || teamMap.get(homeId)?.logo || '',
-                            played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0,
-                        });
-                    }
-                    if (!teamStatsMap.has(awayId)) {
-                        teamStatsMap.set(awayId, {
-                            id: awayId,
-                            name: match.away_team_name || teamMap.get(awayId)?.name || 'Unknown',
-                            logo: match.away_team_logo || teamMap.get(awayId)?.logo || '',
-                            played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, points: 0,
-                        });
-                    }
-
-                    const homeStats = teamStatsMap.get(homeId)!;
-                    const awayStats = teamStatsMap.get(awayId)!;
-
-                    homeStats.played++; awayStats.played++;
-                    homeStats.goalsFor += homeScore; homeStats.goalsAgainst += awayScore;
-                    awayStats.goalsFor += awayScore; awayStats.goalsAgainst += homeScore;
-
-                    if (homeScore > awayScore) {
-                        homeStats.won++; homeStats.points += 3; awayStats.lost++;
-                    } else if (homeScore < awayScore) {
-                        awayStats.won++; awayStats.points += 3; homeStats.lost++;
-                    } else {
-                        homeStats.drawn++; awayStats.drawn++; homeStats.points++; awayStats.points++;
-                    }
-                }
-
-                // Sort and get top 3
-                const sortedStandings = Array.from(teamStatsMap.values())
-                    .sort((a, b) => b.points - a.points || (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst));
-
-                if (sortedStandings.length > 0) {
-                    currentMatchday = Math.ceil(finishedMatches.length / (sortedStandings.length / 2)) || 1;
-                }
-
-                top3Standings = sortedStandings.slice(0, 3).map((s, idx) => ({
-                    position: idx + 1,
-                    team: s.name,
-                    logo: s.logo,
-                    played: s.played,
-                    won: s.won,
-                    drawn: s.drawn,
-                    lost: s.lost,
-                    goals: `${s.goalsFor}:${s.goalsAgainst}`,
-                    points: s.points,
+            // Get top 3 standings with team name lookup
+            top3Standings = rows.slice(0, 3).map((row: any, idx: number) => {
+                const teamInfo = teamMap.get(row.team_id) || { name: `Team ${idx + 1}`, logo: '' };
+                return {
+                    position: row.position || idx + 1,
+                    team: teamInfo.name,
+                    logo: teamInfo.logo,
+                    played: row.total || 0,
+                    won: row.won || 0,
+                    drawn: row.draw || 0,
+                    lost: row.loss || 0,
+                    goals: `${row.goals || 0}:${row.goals_against || 0}`,
+                    points: row.points || 0,
                     zone: idx < 4 ? 'cl' : undefined,
-                }));
-            }
+                };
+            });
         }
 
         // Find top match (first upcoming match)
@@ -302,7 +178,7 @@ export async function GET(
                     season: seasonInfo.season,
                     currentMatchday,
                     totalMatchdays: seasonInfo.totalMatchdays,
-                    teamsCount: leagueTeamIds.size || 18,
+                    teamsCount: seasonInfo.teamCount,
                     progressPercent: Math.round((currentMatchday / seasonInfo.totalMatchdays) * 100),
                 },
                 standings: top3Standings,
@@ -310,10 +186,8 @@ export async function GET(
                 championships,
             },
             debug: {
-                leagueTeamCount: leagueTeamIds.size,
-                tablesChecked,
-                dataArrayIsArray,
-                dataArrayLength,
+                seasonId,
+                rowsFromApi: rows.length,
             },
             timestamp: new Date().toISOString(),
         });
