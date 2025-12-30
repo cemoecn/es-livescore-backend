@@ -7,6 +7,21 @@
 import { supabase } from '@/lib/supabase';
 import { NextRequest, NextResponse } from 'next/server';
 
+// TOP LEAGUES - Only return matches from these competitions
+const TOP_LEAGUE_IDS = [
+    'jednm9whz0ryox8', // Premier League
+    'l965mkyh32r1ge4', // Championship
+    'gy0or5jhg6qwzv3', // Bundesliga
+    'vl7oqdehlyr510j', // La Liga
+    '4zp5rzghp5q82w1', // Serie A
+    'yl5ergphnzr8k0o', // Ligue 1
+    'vl7oqdeheyr510j', // Eredivisie
+    '9vjxm8ghx2r6odg', // Primeira Liga
+    'z8yomo4h7wq0j6l', // Champions League
+    '56ypq3nh0xmd7oj', // Europa League
+    'p4jwq2gh754m0ve', // Conference League
+];
+
 export async function GET(
     _request: NextRequest,
     { params }: { params: Promise<{ date: string }> }
@@ -26,12 +41,13 @@ export async function GET(
         const startOfDay = new Date(`${date}T00:00:00Z`);
         const endOfDay = new Date(`${date}T23:59:59Z`);
 
-        // SIMPLE query - no JOINs needed!
+        // SIMPLE query - filter by TOP_LEAGUE_IDS
         const { data: matches, error: dbError } = await supabase
             .from('matches')
             .select('*')
             .gte('start_time', startOfDay.toISOString())
             .lte('start_time', endOfDay.toISOString())
+            .in('competition_id', TOP_LEAGUE_IDS)
             .order('start_time', { ascending: true });
 
         if (dbError) {
