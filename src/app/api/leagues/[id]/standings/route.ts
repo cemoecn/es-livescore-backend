@@ -1,6 +1,7 @@
 /**
  * GET /api/leagues/[id]/standings
  * Returns full standings for a league using TheSports season/recent/table/detail API
+ * Fetches missing team names from TheSports team API if not in Supabase cache
  */
 
 import { supabase } from '@/lib/supabase';
@@ -39,6 +40,25 @@ function getZone(position: number, leagueId: string): 'cl' | 'el' | 'ecl' | 'rel
     return null;
 }
 
+// Fetch team details from TheSports API
+async function fetchTeamFromApi(teamId: string): Promise<{ name: string; logo: string } | null> {
+    try {
+        const url = `${API_URL}/v1/football/team/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${teamId}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.results) {
+            return {
+                name: data.results.name || data.results.short_name || 'Unknown',
+                logo: data.results.logo || '',
+            };
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
+
 export async function GET(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -69,7 +89,7 @@ export async function GET(
                 .limit(10000),
         ]);
 
-        // Build team lookup map
+        // Build team lookup map from Supabase cache
         const teamMap = new Map<string, { name: string; logo: string }>();
         if (teamsResult.data) {
             for (const team of teamsResult.data) {
@@ -81,8 +101,28 @@ export async function GET(
         const tables = standingsResult?.results?.tables || [];
         const rows = tables[0]?.rows || [];
 
+        // Find missing team IDs
+        const missingTeamIds: string[] = [];
+        for (const row of rows) {
+            if (row.team_id && !teamMap.has(row.team_id)) {
+                missingTeamIds.push(row.team_id);
+            }
+        }
+
+        // Fetch missing teams from TheSports API in parallel
+        if (missingTeamIds.length > 0) {
+            const teamPromises = missingTeamIds.map(async (teamId) => {
+                const teamInfo = await fetchTeamFromApi(teamId);
+                if (teamInfo) {
+                    teamMap.set(teamId, teamInfo);
+                }
+            });
+            await Promise.all(teamPromises);
+        }
+
+        // Build final standings with team info
         const standings = rows.map((row: any, idx: number) => {
-            const teamInfo = teamMap.get(row.team_id) || { name: `Unknown Team`, logo: '' };
+            const teamInfo = teamMap.get(row.team_id) || { name: `Team ${idx + 1}`, logo: '' };
             const position = row.position || idx + 1;
 
             return {
@@ -106,6 +146,7 @@ export async function GET(
                 standings,
                 seasonId,
                 teamsCount: standings.length,
+                fetchedFromApi: missingTeamIds.length,
             },
             timestamp: new Date().toISOString(),
         });
