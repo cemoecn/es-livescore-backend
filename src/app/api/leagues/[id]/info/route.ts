@@ -8,7 +8,6 @@
  */
 
 import { supabase } from '@/lib/supabase';
-import { getStandings } from '@/services/thesports';
 import { NextRequest, NextResponse } from 'next/server';
 
 // Static championship data (TheSports API doesn't provide historical champions)
@@ -70,14 +69,8 @@ export async function GET(
         const { id: leagueId } = await params;
 
         // Fetch data in parallel
-        const [standingsResult, upcomingMatchResult, finishedMatchesResult] = await Promise.all([
-            // 1. Get standings from TheSports API
-            getStandings({ competition_id: leagueId }).catch(err => {
-                console.error('Standings fetch error:', err);
-                return null;
-            }),
-
-            // 2. Get next upcoming match for this league
+        const [upcomingMatchResult, finishedMatchesResult] = await Promise.all([
+            // 1. Get next upcoming match for this league
             supabase
                 .from('matches')
                 .select('id, home_team_name, home_team_logo, away_team_name, away_team_logo, start_time, status')
@@ -87,43 +80,107 @@ export async function GET(
                 .order('start_time', { ascending: true })
                 .limit(10),
 
-            // 3. Count finished matches to calculate current matchday
+            // 2. Get finished matches to calculate standings
             supabase
                 .from('matches')
-                .select('id', { count: 'exact', head: true })
+                .select('home_team_id, home_team_name, home_team_logo, away_team_id, away_team_name, away_team_logo, home_score, away_score')
                 .eq('competition_id', leagueId)
                 .eq('status', 'finished'),
         ]);
 
-        // Process standings - get top 3
-        let top3Standings: Array<{
-            position: number;
-            team: string;
+        // Calculate standings from finished matches
+        type TeamStats = {
+            id: string;
+            name: string;
             logo: string;
             played: number;
             won: number;
             drawn: number;
             lost: number;
-            goals: string;
+            goalsFor: number;
+            goalsAgainst: number;
             points: number;
-            zone?: string;
-        }> = [];
+        };
+        const teamStatsMap = new Map<string, TeamStats>();
 
-        if (standingsResult?.standings) {
-            // Cast to any to handle TheSports API response structure differences
-            top3Standings = (standingsResult.standings as any[]).slice(0, 3).map((s, idx) => ({
-                position: idx + 1,
-                team: s.team_name || s.team?.name || `Team ${idx + 1}`,
-                logo: s.team_logo || s.team?.logo || '',
-                played: s.total?.match || s.played || 0,
-                won: s.total?.win || s.won || 0,
-                drawn: s.total?.draw || s.drawn || 0,
-                lost: s.total?.loss || s.lost || 0,
-                goals: `${s.total?.goals || s.goals_for || 0}:${s.total?.goals_against || s.goals_against || 0}`,
-                points: s.total?.points || s.points || 0,
-                zone: idx < 4 ? 'cl' : undefined, // Top 4 = Champions League zone
-            }));
+        if (finishedMatchesResult.data) {
+            for (const match of finishedMatchesResult.data) {
+                const homeId = match.home_team_id;
+                const awayId = match.away_team_id;
+                const homeScore = match.home_score ?? 0;
+                const awayScore = match.away_score ?? 0;
+
+                // Initialize teams if not exist
+                if (!teamStatsMap.has(homeId)) {
+                    teamStatsMap.set(homeId, {
+                        id: homeId,
+                        name: match.home_team_name || 'Unknown',
+                        logo: match.home_team_logo || '',
+                        played: 0, won: 0, drawn: 0, lost: 0,
+                        goalsFor: 0, goalsAgainst: 0, points: 0,
+                    });
+                }
+                if (!teamStatsMap.has(awayId)) {
+                    teamStatsMap.set(awayId, {
+                        id: awayId,
+                        name: match.away_team_name || 'Unknown',
+                        logo: match.away_team_logo || '',
+                        played: 0, won: 0, drawn: 0, lost: 0,
+                        goalsFor: 0, goalsAgainst: 0, points: 0,
+                    });
+                }
+
+                const homeStats = teamStatsMap.get(homeId)!;
+                const awayStats = teamStatsMap.get(awayId)!;
+
+                // Update stats
+                homeStats.played++;
+                awayStats.played++;
+                homeStats.goalsFor += homeScore;
+                homeStats.goalsAgainst += awayScore;
+                awayStats.goalsFor += awayScore;
+                awayStats.goalsAgainst += homeScore;
+
+                if (homeScore > awayScore) {
+                    homeStats.won++;
+                    homeStats.points += 3;
+                    awayStats.lost++;
+                } else if (homeScore < awayScore) {
+                    awayStats.won++;
+                    awayStats.points += 3;
+                    homeStats.lost++;
+                } else {
+                    homeStats.drawn++;
+                    awayStats.drawn++;
+                    homeStats.points += 1;
+                    awayStats.points += 1;
+                }
+            }
         }
+
+        // Sort by points, then goal difference, then goals scored
+        const sortedStandings = Array.from(teamStatsMap.values())
+            .sort((a, b) => {
+                const gdA = a.goalsFor - a.goalsAgainst;
+                const gdB = b.goalsFor - b.goalsAgainst;
+                if (b.points !== a.points) return b.points - a.points;
+                if (gdB !== gdA) return gdB - gdA;
+                return b.goalsFor - a.goalsFor;
+            });
+
+        // Get top 3
+        const top3Standings = sortedStandings.slice(0, 3).map((s, idx) => ({
+            position: idx + 1,
+            team: s.name,
+            logo: s.logo,
+            played: s.played,
+            won: s.won,
+            drawn: s.drawn,
+            lost: s.lost,
+            goals: `${s.goalsFor}:${s.goalsAgainst}`,
+            points: s.points,
+            zone: idx < 4 ? 'cl' : undefined, // Top 4 = Champions League zone
+        }));
 
         // Find top match (highest-ranked teams playing each other)
         let topMatch = null;
@@ -149,9 +206,9 @@ export async function GET(
 
         // Calculate season progress
         const seasonInfo = SEASON_INFO[leagueId] || { totalMatchdays: 34, season: '2024/25' };
-        const teamsCount = standingsResult?.standings?.length || 18;
+        const teamsCount = sortedStandings.length || 18;
         const matchesPerMatchday = teamsCount / 2;
-        const finishedMatches = finishedMatchesResult.count || 0;
+        const finishedMatches = finishedMatchesResult.data?.length || 0;
         const currentMatchday = Math.min(
             Math.ceil(finishedMatches / matchesPerMatchday) + 1,
             seasonInfo.totalMatchdays
