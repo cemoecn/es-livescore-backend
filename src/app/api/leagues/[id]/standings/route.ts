@@ -92,6 +92,26 @@ export async function GET(
             }
         }
 
+        // Inline corrections for known wrong team names in Supabase
+        // (These get overridden if Supabase has wrong data)
+        const TEAM_NAME_CORRECTIONS: Record<string, string> = {
+            'p3glrw7henvqdyj': 'TSG 1899 Hoffenheim',  // Was showing as Eintracht Frankfurt
+            'vl7oqdehzvnr510': 'FC St. Pauli',
+            'gy0or5jhkvwqwzv': '1. FC Heidenheim',
+            'n54qllh261zqvy9': 'Holstein Kiel',
+            'yl5ergphj74r8k0': '1. FC Köln',
+            'gy0or5jhdoyqwzv': 'Hamburger SV',
+            'vl7oqdehzvnr510': 'FC Augsburg',
+        };
+
+        // Apply corrections
+        for (const [id, correctName] of Object.entries(TEAM_NAME_CORRECTIONS)) {
+            const existing = teamMap.get(id);
+            if (existing) {
+                teamMap.set(id, { ...existing, name: correctName });
+            }
+        }
+
         // Build standings with team info
         const standings = rows.map((row: any, idx: number) => {
             const teamInfo = teamMap.get(row.team_id) || { name: `Team ${idx + 1}`, logo: '' };
