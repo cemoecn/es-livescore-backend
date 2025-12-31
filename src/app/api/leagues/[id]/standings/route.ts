@@ -1,7 +1,7 @@
 /**
  * GET /api/leagues/[id]/standings
  * Returns full standings for a league using TheSports season/recent/table/detail API
- * Fetches missing team names from TheSports team API if not in Supabase cache
+ * Team names and logos are fetched from Supabase teams cache (synced from TheSports)
  */
 
 import { supabase } from '@/lib/supabase';
@@ -40,53 +40,6 @@ function getZone(position: number, leagueId: string): 'cl' | 'el' | 'ecl' | 'rel
     return null;
 }
 
-// Fetch team details from TheSports API
-async function fetchTeamFromApi(teamId: string): Promise<{ name: string; logo: string } | null> {
-    try {
-        const url = `${API_URL}/v1/football/team/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${teamId}`;
-        const response = await fetch(url);
-        const data = await response.json();
-
-        if (data.results) {
-            return {
-                name: data.results.name || data.results.short_name || 'Unknown',
-                logo: data.results.logo || '',
-            };
-        }
-        return null;
-    } catch {
-        return null;
-    }
-}
-
-// Hardcoded Bundesliga 2024/25 team data - IDs from API debug output
-// This ensures all 18 teams are always displayed correctly
-const BUNDESLIGA_2024_TEAMS: Record<string, { name: string; logo: string }> = {
-    // Positions 1-5 (confirmed working from Supabase)
-    'yl5ergphjy2r8k0': { name: 'FC Bayern Munich', logo: 'https://img.thesports.com/football/team/8e31e674cdfd6deb6698a6f30e605ff7.png' },
-    '4zp5rzghe4nq82w': { name: 'Borussia Dortmund', logo: 'https://img.thesports.com/football/team/b2c29f7e22dd5d893d8a59e1c0ba5c56.png' },
-    '4zp5rzghewnq82w': { name: 'Bayer 04 Leverkusen', logo: 'https://img.thesports.com/football/team/a9a9d5be1fd1c5b7b0b1bc80261ac04e.png' },
-    'z318q66hdleqo9j': { name: 'Eintracht Frankfurt', logo: 'https://img.thesports.com/football/team/26a59fe5653a96ba72f4f1e4e08b6d4b.png' },
-    'kdj2ryoh3wyq1zp': { name: 'RB Leipzig', logo: 'https://img.thesports.com/football/team/b2c29f7e22dd5d893d8a59e1c0ba5c56.png' },
-    // Positions 6-8 (from API debug - WERE MISSING)
-    'gx7lm7phd7em2wd': { name: 'VfB Stuttgart', logo: 'https://img.thesports.com/football/team/bfdd500484330d63a723cbc396df762c.png' },
-    'p3glrw7henvqdyj': { name: 'TSG 1899 Hoffenheim', logo: 'https://img.thesports.com/football/team/fe636189a2f3db78d0554c34f0bdaae6.png' },
-    '9vjxm8gh613r6od': { name: 'Union Berlin', logo: 'https://img.thesports.com/football/team/45ab4c846b0d4df5b002c571b16112dc.png' },
-    // Positions 9-14 (from Supabase)
-    'l965mkyh924r1ge': { name: 'SC Freiburg', logo: 'https://img.thesports.com/football/team/e6c7ad0e4d07c9c6c9e1c7b2b0b5b5b5.png' },
-    '9k82rekhdxorepz': { name: 'SV Werder Bremen', logo: 'https://img.thesports.com/football/team/e6c7ad0e4d07c9c6c9e1c7b2b0b5b5b5.png' },
-    'yl5ergphj74r8k0': { name: 'FC Köln', logo: 'https://img.thesports.com/football/team/e6c7ad0e4d07c9c6c9e1c7b2b0b5b5b5.png' },
-    'l965mkyh9o4r1ge': { name: 'Borussia Mönchengladbach', logo: 'https://img.thesports.com/football/team/e6c7ad0e4d07c9c6c9e1c7b2b0b5b5b5.png' },
-    'gy0or5jhdoyqwzv': { name: 'Hamburger SV', logo: 'https://img.thesports.com/football/team/e6c7ad0e4d07c9c6c9e1c7b2b0b5b5b5.png' },
-    '56ypq3nhdnkmd7o': { name: 'VfL Wolfsburg', logo: 'https://img.thesports.com/football/team/e6c7ad0e4d07c9c6c9e1c7b2b0b5b5b5.png' },
-    // Positions 15-17 (from API debug - WERE MISSING)
-    'vl7oqdehzvnr510': { name: 'FC St. Pauli', logo: 'https://img.thesports.com/football/team/db4411a3c4ce1d0f092f5b9d1df08664.png' },
-    'gy0or5jhkvwqwzv': { name: '1. FC Heidenheim', logo: 'https://img.thesports.com/football/team/65503b155488a643de688e8dfa849b1f.png' },
-    'n54qllh261zqvy9': { name: 'Holstein Kiel', logo: 'https://img.thesports.com/football/team/65ee743f20fa7db286fdeda4d33c6980.png' },
-    // Position 18 (from Supabase)
-    'jednm9whl2kryox': { name: '1. FSV Mainz 05', logo: 'https://img.thesports.com/football/team/e6c7ad0e4d07c9c6c9e1c7b2b0b5b5b5.png' },
-};
-
 export async function GET(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -102,58 +55,46 @@ export async function GET(
             );
         }
 
-        // Fetch standings and team cache in parallel
-        const [standingsResult, teamsResult] = await Promise.all([
-            fetch(`${API_URL}/v1/football/season/recent/table/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${seasonId}`)
-                .then(r => r.json())
-                .catch(err => {
-                    console.error('Standings fetch error:', err);
-                    return null;
-                }),
+        // Fetch standings from TheSports API
+        const standingsResponse = await fetch(
+            `${API_URL}/v1/football/season/recent/table/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${seasonId}`
+        );
+        const standingsData = await standingsResponse.json();
 
-            supabase
-                .from('teams')
-                .select('id, name, logo')
-                .limit(10000),
-        ]);
-
-        // Build team lookup map from Supabase cache
-        const teamMap = new Map<string, { name: string; logo: string }>();
-        if (teamsResult.data) {
-            for (const team of teamsResult.data) {
-                teamMap.set(team.id, { name: team.name, logo: team.logo });
-            }
-        }
-
-        // Parse standings
-        const tables = standingsResult?.results?.tables || [];
+        const tables = standingsData?.results?.tables || [];
         const rows = tables[0]?.rows || [];
 
-        // Find missing team IDs
-        const missingTeamIds: string[] = [];
-        for (const row of rows) {
-            if (row.team_id && !teamMap.has(row.team_id)) {
-                missingTeamIds.push(row.team_id);
+        if (rows.length === 0) {
+            return NextResponse.json({
+                success: true,
+                data: { standings: [], seasonId, teamsCount: 0 },
+            });
+        }
+
+        // Get all team IDs from standings
+        const teamIds = rows.map((row: any) => row.team_id as string);
+
+        // Fetch team info from Supabase in one query
+        const { data: teamsData, error: teamsError } = await supabase
+            .from('teams')
+            .select('id, name, logo')
+            .in('id', teamIds);
+
+        if (teamsError) {
+            console.error('Supabase teams fetch error:', teamsError);
+        }
+
+        // Build team lookup map
+        const teamMap = new Map<string, { name: string; logo: string }>();
+        if (teamsData) {
+            for (const team of teamsData) {
+                teamMap.set(team.id, { name: team.name, logo: team.logo || '' });
             }
         }
 
-        // Fetch missing teams from TheSports API in parallel
-        if (missingTeamIds.length > 0) {
-            const teamPromises = missingTeamIds.map(async (teamId) => {
-                const teamInfo = await fetchTeamFromApi(teamId);
-                if (teamInfo) {
-                    teamMap.set(teamId, teamInfo);
-                }
-            });
-            await Promise.all(teamPromises);
-        }
-
-        // Build final standings with team info
+        // Build standings with team info
         const standings = rows.map((row: any, idx: number) => {
-            // Try Supabase cache first, then hardcoded Bundesliga teams, then API result
-            const teamInfo = teamMap.get(row.team_id)
-                || BUNDESLIGA_2024_TEAMS[row.team_id]
-                || { name: `Team ${idx + 1}`, logo: '' };
+            const teamInfo = teamMap.get(row.team_id) || { name: `Team ${idx + 1}`, logo: '' };
             const position = row.position || idx + 1;
 
             return {
@@ -171,11 +112,8 @@ export async function GET(
             };
         });
 
-        // Collect all team_ids for debugging missing mappings
-        const allTeamIds = rows.map((row: any) => ({
-            position: row.position,
-            team_id: row.team_id,
-        }));
+        // Debug: check which teams are missing
+        const missingTeams = standings.filter(s => s.team.startsWith('Team '));
 
         return NextResponse.json({
             success: true,
@@ -183,10 +121,10 @@ export async function GET(
                 standings,
                 seasonId,
                 teamsCount: standings.length,
-                fetchedFromApi: missingTeamIds.length,
             },
             debug: {
-                allTeamIds,
+                teamsInDb: teamsData?.length || 0,
+                missingCount: missingTeams.length,
             },
             timestamp: new Date().toISOString(),
         });
