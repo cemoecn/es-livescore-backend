@@ -92,23 +92,34 @@ export async function GET(
             }
         }
 
-        // Inline corrections for known wrong team names in Supabase
+        // Exhaustive corrections for Bundesliga 24/25 entries
         const TEAM_NAME_CORRECTIONS: Record<string, string> = {
-            'p3glrw7henvqdyj': 'TSG 1899 Hoffenheim',  // Was showing as Eintracht Frankfurt in POS 7
+            'yl5ergphjy2r8k0': 'FC Bayern Munich',
+            '4zp5rzghe4nq82w': 'Borussia Dortmund',
+            '4zp5rzghewnq82w': 'Bayer 04 Leverkusen',
+            'z318q66hdleqo9j': 'Eintracht Frankfurt',
+            'kdj2ryoh3wyq1zp': 'RB Leipzig',
+            'gx7lm7phd7em2wd': 'VfB Stuttgart',
+            'p3glrw7henvqdyj': 'TSG 1899 Hoffenheim',
+            '9vjxm8gh613r6od': '1. FC Union Berlin',
+            'l965mkyh924r1ge': 'SC Freiburg',
+            '9k82rekhdxorepz': 'SV Werder Bremen',
+            'yl5ergphj74r8k0': '1. FC Köln',
+            'l965mkyh9o4r1ge': 'Borussia Mönchengladbach',
+            'gy0or5jhdoyqwzv': 'Hamburger SV',
+            '56ypq3nhdnkmd7o': 'VfL Wolfsburg',
             'vl7oqdehzvnr510': 'FC Augsburg',
             'gy0or5jhkvwqwzv': '1. FC Heidenheim',
             'n54qllh261zqvy9': 'Holstein Kiel',
-            'yl5ergphj74r8k0': '1. FC Köln',
-            'gy0or5jhdoyqwzv': 'Hamburger SV',
+            'jednm9whl2kryox': '1. FSV Mainz 05',
         };
 
-        // Apply corrections (even if not in teamMap yet)
+        // Apply corrections
         for (const [id, correctName] of Object.entries(TEAM_NAME_CORRECTIONS)) {
             const existing = teamMap.get(id);
             if (existing) {
                 teamMap.set(id, { ...existing, name: correctName });
             } else {
-                // If not in DB, at least we have the correct name
                 teamMap.set(id, { name: correctName, logo: '' });
             }
         }
