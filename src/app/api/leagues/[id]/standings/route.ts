@@ -93,9 +93,8 @@ export async function GET(
         }
 
         // Inline corrections for known wrong team names in Supabase
-        // (These get overridden if Supabase has wrong data)
         const TEAM_NAME_CORRECTIONS: Record<string, string> = {
-            'p3glrw7henvqdyj': 'TSG 1899 Hoffenheim',  // Was showing as Eintracht Frankfurt
+            'p3glrw7henvqdyj': 'TSG 1899 Hoffenheim',  // Was showing as Eintracht Frankfurt in POS 7
             'vl7oqdehzvnr510': 'FC Augsburg',
             'gy0or5jhkvwqwzv': '1. FC Heidenheim',
             'n54qllh261zqvy9': 'Holstein Kiel',
@@ -103,11 +102,14 @@ export async function GET(
             'gy0or5jhdoyqwzv': 'Hamburger SV',
         };
 
-        // Apply corrections
+        // Apply corrections (even if not in teamMap yet)
         for (const [id, correctName] of Object.entries(TEAM_NAME_CORRECTIONS)) {
             const existing = teamMap.get(id);
             if (existing) {
                 teamMap.set(id, { ...existing, name: correctName });
+            } else {
+                // If not in DB, at least we have the correct name
+                teamMap.set(id, { name: correctName, logo: '' });
             }
         }
 
@@ -148,6 +150,7 @@ export async function GET(
                     position: row.position,
                     team_id: row.team_id,
                 })),
+                appliedCorrections: Object.keys(TEAM_NAME_CORRECTIONS).length
             },
             timestamp: new Date().toISOString(),
         });
