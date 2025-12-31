@@ -96,12 +96,11 @@ export async function GET(
         // (These get overridden if Supabase has wrong data)
         const TEAM_NAME_CORRECTIONS: Record<string, string> = {
             'p3glrw7henvqdyj': 'TSG 1899 Hoffenheim',  // Was showing as Eintracht Frankfurt
-            'vl7oqdehzvnr510': 'FC St. Pauli',
+            'vl7oqdehzvnr510': 'FC Augsburg',
             'gy0or5jhkvwqwzv': '1. FC Heidenheim',
             'n54qllh261zqvy9': 'Holstein Kiel',
             'yl5ergphj74r8k0': '1. FC Köln',
             'gy0or5jhdoyqwzv': 'Hamburger SV',
-            'vl7oqdehzvnr510': 'FC Augsburg',
         };
 
         // Apply corrections
@@ -133,7 +132,7 @@ export async function GET(
         });
 
         // Debug: check which teams are missing
-        const missingTeams = standings.filter(s => s.team.startsWith('Team '));
+        const missingTeams = standings.filter((s: any) => s.team.startsWith('Team '));
 
         return NextResponse.json({
             success: true,
@@ -145,6 +144,10 @@ export async function GET(
             debug: {
                 teamsInDb: teamsData?.length || 0,
                 missingCount: missingTeams.length,
+                allTeamIds: rows.map((row: any) => ({
+                    position: row.position,
+                    team_id: row.team_id,
+                })),
             },
             timestamp: new Date().toISOString(),
         });
