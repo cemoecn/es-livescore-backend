@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
         let totalFetched = 0;
         let totalInserted = 0;
         let totalErrors = 0;
+        let lastError = '';
 
         for (let page = 1; page <= maxPages; page++) {
             const players = await fetchPage<any>('/v1/football/player/with_stat/list', page);
@@ -76,6 +77,7 @@ export async function POST(request: NextRequest) {
 
             if (error) {
                 console.error(`[SyncPlayers] Batch ${page} error:`, error.message);
+                lastError = error.message;
                 totalErrors++;
             } else {
                 totalInserted += batch.length;
@@ -95,6 +97,7 @@ export async function POST(request: NextRequest) {
                 fetched: totalFetched,
                 inserted: totalInserted,
                 errors: totalErrors,
+                lastError: lastError || null,
                 duration,
             },
             timestamp: new Date().toISOString(),
