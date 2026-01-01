@@ -97,7 +97,7 @@ export async function GET(
         // 2. Get team IDs from top 3 standings
         const top3TeamIds = rows.slice(0, 3).map((row: any) => row.team_id as string);
 
-        // 3. Fetch data in parallel - teams by specific IDs, upcoming match
+        // 3. Fetch data in parallel - teams by specific IDs, upcoming matches from API
         const [teamsResult, upcomingMatchResult] = await Promise.all([
             // Get only the teams we need from Supabase
             top3TeamIds.length > 0
@@ -107,15 +107,13 @@ export async function GET(
                     .in('id', top3TeamIds)
                 : Promise.resolve({ data: [], error: null }),
 
-            // Get next upcoming match for this league
-            supabase
-                .from('matches')
-                .select('id, home_team_name, home_team_logo, away_team_name, away_team_logo, start_time, status')
-                .eq('competition_id', leagueId)
-                .eq('status', 'scheduled')
-                .gte('start_time', new Date().toISOString())
-                .order('start_time', { ascending: true })
-                .limit(10),
+            // Get upcoming matches from TheSports API for this league
+            fetch(`${API_URL}/v1/football/match/diary?user=${USERNAME}&secret=${API_KEY}&competition_id=${leagueId}`)
+                .then(r => r.json())
+                .catch(err => {
+                    console.error('Upcoming matches fetch error:', err);
+                    return null;
+                }),
         ]);
 
         // Build team lookup map
@@ -164,20 +162,53 @@ export async function GET(
             });
         }
 
-        // Find top match (first upcoming match)
+        // Find top match from TheSports API response
         let topMatch = null;
-        if (upcomingMatchResult.data && upcomingMatchResult.data.length > 0) {
-            const match = upcomingMatchResult.data[0];
-            const matchDate = new Date(match.start_time);
+        const upcomingMatches = upcomingMatchResult?.results || [];
+        if (upcomingMatches.length > 0) {
+            // Get first upcoming match
+            const match = upcomingMatches[0];
+            const matchDate = new Date(match.match_time * 1000); // Unix timestamp to Date
+
+            // Get team info from lookup or use IDs as fallback
+            const homeTeamInfo = teamMap.get(match.home_team_id) || { name: 'Home', logo: '' };
+            const awayTeamInfo = teamMap.get(match.away_team_id) || { name: 'Away', logo: '' };
+
+            // Need to fetch team info for the match teams if not in top 3
+            let homeTeam = homeTeamInfo;
+            let awayTeam = awayTeamInfo;
+
+            // If teams not found, try to fetch from Supabase
+            if (homeTeam.name === 'Home' || awayTeam.name === 'Away') {
+                const matchTeamIds = [match.home_team_id, match.away_team_id].filter(id => id);
+                if (matchTeamIds.length > 0) {
+                    const { data: matchTeamsData } = await supabase
+                        .from('teams')
+                        .select('id, name, logo')
+                        .in('id', matchTeamIds);
+
+                    if (matchTeamsData) {
+                        for (const t of matchTeamsData) {
+                            if (t.id === match.home_team_id) {
+                                homeTeam = { name: t.name, logo: t.logo || '' };
+                            }
+                            if (t.id === match.away_team_id) {
+                                awayTeam = { name: t.name, logo: t.logo || '' };
+                            }
+                        }
+                    }
+                }
+            }
+
             topMatch = {
                 id: match.id,
                 homeTeam: {
-                    name: match.home_team_name || 'TBD',
-                    logo: match.home_team_logo || '',
+                    name: homeTeam.name,
+                    logo: homeTeam.logo,
                 },
                 awayTeam: {
-                    name: match.away_team_name || 'TBD',
-                    logo: match.away_team_logo || '',
+                    name: awayTeam.name,
+                    logo: awayTeam.logo,
                 },
                 date: matchDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' }),
                 time: matchDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
