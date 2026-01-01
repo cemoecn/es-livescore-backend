@@ -17,20 +17,30 @@ const USERNAME = process.env.THESPORTS_USERNAME || '';
 // Current 2024/25 season IDs mapped by competition_id
 // These are verified to work with /v1/football/season/recent/table/detail
 const CURRENT_SEASON_IDS: Record<string, string> = {
-    'gy0or5jhg6qwzv3': 'e4wyrn4hg8gq86p', // Bundesliga 2024/25 - cur_round: 16, 18 teams, 41pts leader
-    'jednm9whz0ryox8': 'l965mkyhjpxr1ge', // Premier League 2024/25 - 20 teams, 45pts leader
-    'vl7oqdehlyr510j': 'l965mkyhjpxr1ge', // La Liga 2024/25 (temp - need to find correct)
-    '4zp5rzghp5q82w1': 'l965mkyhjpxr1ge', // Serie A 2024/25 (temp - need to find correct)
-    'yl5ergphnzr8k0o': 'e4wyrn4hg8gq86p', // Ligue 1 2024/25 (temp - need to find correct)
+    'gy0or5jhg6qwzv3': 'e4wyrn4hg8gq86p', // Bundesliga 2024/25
+    'jednm9whz0ryox8': 'l965mkyhjpxr1ge', // Premier League 2024/25
+    'l965mkyh32r1ge4': 'gpxwrxlhd12ryk0', // Championship 2024/25
+    'vl7oqdehlyr510j': '56ypq3nhxw7md7o', // La Liga 2024/25
+    '4zp5rzghp5q82w1': '4zp5rzghn83q82w', // Serie A 2024/25
+    'yl5ergphnzr8k0o': '9dn1m1gh645moep', // Ligue 1 2024/25
+    'vl7oqdeheyr510j': 'yl5ergphgo0r8k0', // Eredivisie 2024/25
+    '9vjxm8ghx2r6odg': 'kjw2r09h811rz84', // Primeira Liga 2024/25
+    'z8yomo4h7wq0j6l': 'z8yomo4hn70q0j6', // Champions League 2024/25
+    '56ypq3nh0xmd7oj': 'v2y8m4zhl38ql07', // Europa League 2024/25
 };
 
 // Season info per league (2024/25)
 const SEASON_INFO: Record<string, { totalMatchdays: number; season: string; teamCount: number }> = {
     'gy0or5jhg6qwzv3': { totalMatchdays: 34, season: '2024/25', teamCount: 18 }, // Bundesliga
     'jednm9whz0ryox8': { totalMatchdays: 38, season: '2024/25', teamCount: 20 }, // Premier League
+    'l965mkyh32r1ge4': { totalMatchdays: 46, season: '2024/25', teamCount: 24 }, // Championship
     'vl7oqdehlyr510j': { totalMatchdays: 38, season: '2024/25', teamCount: 20 }, // La Liga
     '4zp5rzghp5q82w1': { totalMatchdays: 38, season: '2024/25', teamCount: 20 }, // Serie A
     'yl5ergphnzr8k0o': { totalMatchdays: 34, season: '2024/25', teamCount: 18 }, // Ligue 1
+    'vl7oqdeheyr510j': { totalMatchdays: 34, season: '2024/25', teamCount: 18 }, // Eredivisie
+    '9vjxm8ghx2r6odg': { totalMatchdays: 34, season: '2024/25', teamCount: 18 }, // Primeira Liga
+    'z8yomo4h7wq0j6l': { totalMatchdays: 8, season: '2024/25', teamCount: 36 }, // Champions League
+    '56ypq3nh0xmd7oj': { totalMatchdays: 8, season: '2024/25', teamCount: 36 }, // Europa League
 };
 
 // Static championship data (TheSports API doesn't provide historical champions)
