@@ -16,22 +16,25 @@ const CURRENT_SEASON_IDS: Record<string, string> = {
     'gy0or5jhg6qwzv3': 'e4wyrn4hg8gq86p', // Bundesliga 2024/25
     'jednm9whz0ryox8': 'l965mkyhjpxr1ge', // Premier League 2024/25
     'l965mkyh32r1ge4': 'gpxwrxlhd12ryk0', // Championship 2024/25
-    'vl7oqdehlyr510j': 'kdj2ryoh8n5q1zp', // La Liga 2024/25
-    '4zp5rzghp5q82w1': 'kdj2ryoh8xlq1zp', // Serie A 2024/25
-    'yl5ergphnzr8k0o': 'gx7lm7ph407m2wd', // Ligue 1 2024/25
-    'vl7oqdeheyr510j': 'v2y8m4zhlj8ql07', // Eredivisie 2024/25
-    '9vjxm8ghx2r6odg': 'z318q66hlk0qo9j', // Primeira Liga 2024/25
-    'z8yomo4h7wq0j6l': 'v2y8m4zhl38ql07', // Champions League 2024/25
-    '56ypq3nh0xmd7oj': 'gy0or5jhj6qwzv3', // Europa League 2024/25
+    'vl7oqdehlyr510j': '56ypq3nhxw7md7o', // La Liga 2024/25
+    '4zp5rzghp5q82w1': '4zp5rzghn83q82w', // Serie A 2024/25
+    'yl5ergphnzr8k0o': '9dn1m1gh645moep', // Ligue 1 2024/25
+    'vl7oqdeheyr510j': 'yl5ergphgo0r8k0', // Eredivisie 2024/25
+    '9vjxm8ghx2r6odg': 'kjw2r09h811rz84', // Primeira Liga 2024/25
+    'z8yomo4h7wq0j6l': 'z8yomo4hn70q0j6', // Champions League 2024/25
+    '56ypq3nh0xmd7oj': 'v2y8m4zhl38ql07', // Europa League 2024/25
 };
 
 // Zone configuration per league (positions for CL, EL, ECL, relegation)
 const LEAGUE_ZONES: Record<string, { cl: number[]; el: number[]; ecl: number[]; relegation: number[] }> = {
     'gy0or5jhg6qwzv3': { cl: [1, 2, 3, 4], el: [5, 6], ecl: [7], relegation: [16, 17, 18] }, // Bundesliga
     'jednm9whz0ryox8': { cl: [1, 2, 3, 4], el: [5], ecl: [6], relegation: [18, 19, 20] }, // Premier League
+    'l965mkyh32r1ge4': { cl: [], el: [], ecl: [], relegation: [22, 23, 24] }, // Championship (promotion 1-2, playoffs 3-6)
     'vl7oqdehlyr510j': { cl: [1, 2, 3, 4], el: [5, 6], ecl: [], relegation: [18, 19, 20] }, // La Liga
     '4zp5rzghp5q82w1': { cl: [1, 2, 3, 4], el: [5], ecl: [6], relegation: [18, 19, 20] }, // Serie A
     'yl5ergphnzr8k0o': { cl: [1, 2, 3], el: [4], ecl: [5], relegation: [16, 17, 18] }, // Ligue 1
+    'vl7oqdeheyr510j': { cl: [1], el: [2, 3], ecl: [], relegation: [16, 17, 18] }, // Eredivisie
+    '9vjxm8ghx2r6odg': { cl: [1, 2], el: [3], ecl: [4], relegation: [16, 17, 18] }, // Primeira Liga
 };
 
 function getZone(position: number, leagueId: string): 'cl' | 'el' | 'ecl' | 'relegation' | null {
