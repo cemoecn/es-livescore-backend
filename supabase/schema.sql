@@ -14,10 +14,16 @@ CREATE TABLE IF NOT EXISTS countries (
 );
 
 -- Add missing columns if table exists
-ALTER TABLE countries ADD COLUMN IF NOT EXISTS continent TEXT;
-ALTER TABLE countries ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'countries' AND column_name = 'continent') THEN
+        ALTER TABLE countries ADD COLUMN continent TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'countries' AND column_name = 'updated_at') THEN
+        ALTER TABLE countries ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW();
+    END IF;
+END $$;
 
--- Create index for faster lookups
 CREATE INDEX IF NOT EXISTS idx_countries_continent ON countries(continent);
 
 -- 2. COMPETITIONS TABLE
@@ -27,7 +33,7 @@ CREATE TABLE IF NOT EXISTS competitions (
     name TEXT NOT NULL,
     short_name TEXT,
     logo TEXT,
-    country_id TEXT REFERENCES countries(id) ON DELETE SET NULL,
+    country_id TEXT,
     type TEXT,
     priority INTEGER DEFAULT 999,
     primary_color TEXT,
@@ -35,22 +41,33 @@ CREATE TABLE IF NOT EXISTS competitions (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Add missing columns if table exists
-ALTER TABLE competitions ADD COLUMN IF NOT EXISTS country_id TEXT;
-ALTER TABLE competitions ADD COLUMN IF NOT EXISTS priority INTEGER DEFAULT 999;
-ALTER TABLE competitions ADD COLUMN IF NOT EXISTS primary_color TEXT;
-ALTER TABLE competitions ADD COLUMN IF NOT EXISTS secondary_color TEXT;
-ALTER TABLE competitions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'competitions' AND column_name = 'country_id') THEN
+        ALTER TABLE competitions ADD COLUMN country_id TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'competitions' AND column_name = 'priority') THEN
+        ALTER TABLE competitions ADD COLUMN priority INTEGER DEFAULT 999;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'competitions' AND column_name = 'primary_color') THEN
+        ALTER TABLE competitions ADD COLUMN primary_color TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'competitions' AND column_name = 'secondary_color') THEN
+        ALTER TABLE competitions ADD COLUMN secondary_color TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'competitions' AND column_name = 'updated_at') THEN
+        ALTER TABLE competitions ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW();
+    END IF;
+END $$;
 
--- Create indexes
 CREATE INDEX IF NOT EXISTS idx_competitions_country ON competitions(country_id);
 CREATE INDEX IF NOT EXISTS idx_competitions_priority ON competitions(priority);
 
--- 3. SEASONS TABLE (NEW)
+-- 3. SEASONS TABLE
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS seasons (
     id TEXT PRIMARY KEY,
-    competition_id TEXT REFERENCES competitions(id) ON DELETE CASCADE,
+    competition_id TEXT,
     name TEXT NOT NULL,
     year INTEGER,
     is_current BOOLEAN DEFAULT FALSE,
@@ -59,9 +76,7 @@ CREATE TABLE IF NOT EXISTS seasons (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Create indexes
 CREATE INDEX IF NOT EXISTS idx_seasons_competition ON seasons(competition_id);
-CREATE INDEX IF NOT EXISTS idx_seasons_current ON seasons(is_current) WHERE is_current = TRUE;
 
 -- 4. TEAMS TABLE
 -- ============================================================================
@@ -70,28 +85,37 @@ CREATE TABLE IF NOT EXISTS teams (
     name TEXT NOT NULL,
     short_name TEXT,
     logo TEXT,
-    country_id TEXT REFERENCES countries(id) ON DELETE SET NULL,
+    country_id TEXT,
     founded INTEGER,
     venue TEXT,
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Add missing columns if table exists
-ALTER TABLE teams ADD COLUMN IF NOT EXISTS country_id TEXT;
-ALTER TABLE teams ADD COLUMN IF NOT EXISTS founded INTEGER;
-ALTER TABLE teams ADD COLUMN IF NOT EXISTS venue TEXT;
-ALTER TABLE teams ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'teams' AND column_name = 'country_id') THEN
+        ALTER TABLE teams ADD COLUMN country_id TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'teams' AND column_name = 'founded') THEN
+        ALTER TABLE teams ADD COLUMN founded INTEGER;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'teams' AND column_name = 'venue') THEN
+        ALTER TABLE teams ADD COLUMN venue TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'teams' AND column_name = 'updated_at') THEN
+        ALTER TABLE teams ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW();
+    END IF;
+END $$;
 
--- Create index
 CREATE INDEX IF NOT EXISTS idx_teams_country ON teams(country_id);
 
--- 5. PLAYERS TABLE (NEW)
+-- 5. PLAYERS TABLE
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS players (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     short_name TEXT,
-    team_id TEXT REFERENCES teams(id) ON DELETE SET NULL,
+    team_id TEXT,
     position TEXT,
     nationality TEXT,
     birth_date DATE,
@@ -101,39 +125,23 @@ CREATE TABLE IF NOT EXISTS players (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Create indexes
 CREATE INDEX IF NOT EXISTS idx_players_team ON players(team_id);
 CREATE INDEX IF NOT EXISTS idx_players_position ON players(position);
-CREATE INDEX IF NOT EXISTS idx_players_nationality ON players(nationality);
 
--- 6. MATCHES TABLE (should exist, ensure columns)
+-- 6. MATCHES TABLE (ensure columns exist)
 -- ============================================================================
--- This table should already exist, just ensure all columns are present
-ALTER TABLE matches ADD COLUMN IF NOT EXISTS home_team_id TEXT;
-ALTER TABLE matches ADD COLUMN IF NOT EXISTS away_team_id TEXT;
-ALTER TABLE matches ADD COLUMN IF NOT EXISTS competition_id TEXT;
-ALTER TABLE matches ADD COLUMN IF NOT EXISTS season_id TEXT;
-
--- 7. ROW LEVEL SECURITY (Optional but recommended)
--- ============================================================================
--- Enable RLS on all tables
-ALTER TABLE countries ENABLE ROW LEVEL SECURITY;
-ALTER TABLE competitions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE seasons ENABLE ROW LEVEL SECURITY;
-ALTER TABLE teams ENABLE ROW LEVEL SECURITY;
-ALTER TABLE players ENABLE ROW LEVEL SECURITY;
-
--- Create policies for public read access
-CREATE POLICY IF NOT EXISTS "Public read access" ON countries FOR SELECT USING (true);
-CREATE POLICY IF NOT EXISTS "Public read access" ON competitions FOR SELECT USING (true);
-CREATE POLICY IF NOT EXISTS "Public read access" ON seasons FOR SELECT USING (true);
-CREATE POLICY IF NOT EXISTS "Public read access" ON teams FOR SELECT USING (true);
-CREATE POLICY IF NOT EXISTS "Public read access" ON players FOR SELECT USING (true);
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'matches' AND column_name = 'season_id') THEN
+        ALTER TABLE matches ADD COLUMN season_id TEXT;
+    END IF;
+END $$;
 
 -- ============================================================================
--- VERIFICATION QUERIES (run after schema creation)
+-- DONE! Run this verification query to confirm:
 -- ============================================================================
--- SELECT table_name, column_name, data_type 
--- FROM information_schema.columns 
--- WHERE table_name IN ('countries', 'competitions', 'seasons', 'teams', 'players')
--- ORDER BY table_name, ordinal_position;
+SELECT table_name, COUNT(*) as column_count
+FROM information_schema.columns 
+WHERE table_name IN ('countries', 'competitions', 'seasons', 'teams', 'players')
+GROUP BY table_name
+ORDER BY table_name;

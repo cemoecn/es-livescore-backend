@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
         let totalErrors = 0;
 
         for (let page = 1; page <= maxPages; page++) {
-            const players = await fetchPage<any>('/v1/football/player/additional/list', page);
+            const players = await fetchPage<any>('/v1/football/player/with_stat/list', page);
 
             if (players.length === 0) {
                 console.log(`[SyncPlayers] Stopped at page ${page} (empty)`);
