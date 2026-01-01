@@ -79,19 +79,35 @@ export async function GET(
         const seasonId = CURRENT_SEASON_IDS[leagueId];
         const seasonInfo = SEASON_INFO[leagueId] || { totalMatchdays: 34, season: '2024/25', teamCount: 18 };
 
-        // Fetch data in parallel
-        const [tableResult, upcomingMatchResult, teamsResult] = await Promise.all([
-            // 1. Get standings from TheSports API using season/recent/table/detail
-            seasonId
-                ? fetch(`${API_URL}/v1/football/season/recent/table/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${seasonId}`)
-                    .then(r => r.json())
-                    .catch(err => {
-                        console.error('Table fetch error:', err);
-                        return null;
-                    })
-                : Promise.resolve(null),
+        // 1. Fetch standings from TheSports API first
+        let tableResult = null;
+        if (seasonId) {
+            try {
+                const response = await fetch(`${API_URL}/v1/football/season/recent/table/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${seasonId}`);
+                tableResult = await response.json();
+            } catch (err) {
+                console.error('Table fetch error:', err);
+            }
+        }
 
-            // 2. Get next upcoming match for this league
+        // Parse standings rows
+        const tables = tableResult?.results?.tables || [];
+        const rows = tables[0]?.rows || [];
+
+        // 2. Get team IDs from top 3 standings
+        const top3TeamIds = rows.slice(0, 3).map((row: any) => row.team_id as string);
+
+        // 3. Fetch data in parallel - teams by specific IDs, upcoming match
+        const [teamsResult, upcomingMatchResult] = await Promise.all([
+            // Get only the teams we need from Supabase
+            top3TeamIds.length > 0
+                ? supabase
+                    .from('teams')
+                    .select('id, name, logo')
+                    .in('id', top3TeamIds)
+                : Promise.resolve({ data: [], error: null }),
+
+            // Get next upcoming match for this league
             supabase
                 .from('matches')
                 .select('id, home_team_name, home_team_logo, away_team_name, away_team_logo, start_time, status')
@@ -100,23 +116,17 @@ export async function GET(
                 .gte('start_time', new Date().toISOString())
                 .order('start_time', { ascending: true })
                 .limit(10),
-
-            // 3. Get teams from Supabase cache for name lookup
-            supabase
-                .from('teams')
-                .select('id, name, logo')
-                .limit(5000),
         ]);
 
         // Build team lookup map
         const teamMap = new Map<string, { name: string; logo: string }>();
         if (teamsResult.data) {
             for (const team of teamsResult.data) {
-                teamMap.set(team.id, { name: team.name, logo: team.logo });
+                teamMap.set(team.id, { name: team.name, logo: team.logo || '' });
             }
         }
 
-        // Process standings from API response
+        // Process standings
         let top3Standings: Array<{
             position: number;
             team: string;
@@ -131,10 +141,6 @@ export async function GET(
         }> = [];
 
         let currentMatchday = 1;
-
-        // Parse the standings from season/recent/table/detail response
-        const tables = tableResult?.results?.tables || [];
-        const rows = tables[0]?.rows || [];
 
         if (rows.length > 0) {
             // Get matchday from first team's total games played
