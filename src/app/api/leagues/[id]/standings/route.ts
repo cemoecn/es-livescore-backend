@@ -84,43 +84,12 @@ export async function GET(
             console.error('Supabase teams fetch error:', teamsError);
         }
 
-        // Build team lookup map
+        // Build team lookup map directly from Supabase data
+        // No manual corrections - Supabase has authoritative team names from the sync
         const teamMap = new Map<string, { name: string; logo: string }>();
         if (teamsData) {
             for (const team of teamsData) {
                 teamMap.set(team.id, { name: team.name, logo: team.logo || '' });
-            }
-        }
-
-        // Exhaustive corrections for Bundesliga 24/25 entries
-        const TEAM_NAME_CORRECTIONS: Record<string, string> = {
-            'yl5ergphjy2r8k0': 'FC Bayern Munich',
-            '4zp5rzghe4nq82w': 'Borussia Dortmund',
-            '4zp5rzghewnq82w': 'Bayer 04 Leverkusen',
-            'z318q66hdleqo9j': 'Eintracht Frankfurt',
-            'kdj2ryoh3wyq1zp': 'RB Leipzig',
-            'gx7lm7phd7em2wd': 'VfB Stuttgart',
-            'p3glrw7henvqdyj': 'TSG 1899 Hoffenheim',
-            '9vjxm8gh613r6od': '1. FC Union Berlin',
-            'l965mkyh924r1ge': 'SC Freiburg',
-            '9k82rekhdxorepz': 'SV Werder Bremen',
-            'yl5ergphj74r8k0': '1. FC Köln',
-            'l965mkyh9o4r1ge': 'Borussia Mönchengladbach',
-            'gy0or5jhdoyqwzv': 'Hamburger SV',
-            '56ypq3nhdnkmd7o': 'VfL Wolfsburg',
-            'vl7oqdehzvnr510': 'FC Augsburg',
-            'gy0or5jhkvwqwzv': '1. FC Heidenheim',
-            'n54qllh261zqvy9': 'Holstein Kiel',
-            'jednm9whl2kryox': '1. FSV Mainz 05',
-        };
-
-        // Apply corrections
-        for (const [id, correctName] of Object.entries(TEAM_NAME_CORRECTIONS)) {
-            const existing = teamMap.get(id);
-            if (existing) {
-                teamMap.set(id, { ...existing, name: correctName });
-            } else {
-                teamMap.set(id, { name: correctName, logo: '' });
             }
         }
 
@@ -161,7 +130,6 @@ export async function GET(
                     position: row.position,
                     team_id: row.team_id,
                 })),
-                appliedCorrections: Object.keys(TEAM_NAME_CORRECTIONS).length
             },
             timestamp: new Date().toISOString(),
         });
