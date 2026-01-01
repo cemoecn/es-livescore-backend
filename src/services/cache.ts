@@ -301,6 +301,27 @@ export async function ensureCachesLoaded(): Promise<void> {
 }
 
 /**
+ * Reset all caches (hard reset)
+ */
+export function resetAllCaches(): void {
+    console.log('[Cache] Performing hard reset of all caches...');
+
+    teamsCache.data.clear();
+    teamsCache.lastUpdated = 0;
+    teamsCache.isLoading = false;
+
+    competitionsCache.data.clear();
+    competitionsCache.lastUpdated = 0;
+    competitionsCache.isLoading = false;
+
+    countriesCache.data.clear();
+    countriesCache.lastUpdated = 0;
+    countriesCache.isLoading = false;
+
+    console.log('[Cache] All caches cleared');
+}
+
+/**
  * Get cache stats
  */
 export function getCacheStats() {
@@ -324,6 +345,7 @@ export const CacheService = {
     getCompetitionById,
     getCountryById,
     getCacheStats,
+    resetAllCaches,
 };
 
 export default CacheService;
