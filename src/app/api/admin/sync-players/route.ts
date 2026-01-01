@@ -59,19 +59,36 @@ export async function POST(request: NextRequest) {
             totalFetched += players.length;
 
             // Batch upsert
-            const batch = players.map(p => ({
-                id: p.id,
-                name: p.name || p.name_en || 'Unknown Player',
-                short_name: p.short_name || null,
-                team_id: p.team_id || null,
-                position: p.position || p.position_name || null,
-                nationality: p.nationality || p.country_name || null,
-                birth_date: p.birthday || p.birth_date || null,
-                photo: p.logo || p.photo || null,
-                jersey_number: p.shirt_number || p.jersey_number || null,
-                market_value: p.market_value || null,
-                updated_at: new Date().toISOString(),
-            }));
+            const batch = players.map(p => {
+                // Helper to convert Unix timestamp to date string
+                let birthDate = null;
+                if (p.birthday || p.birth_date) {
+                    const ts = p.birthday || p.birth_date;
+                    // Check if it's a Unix timestamp (number) or already a date string
+                    if (typeof ts === 'number' || /^\d+$/.test(ts)) {
+                        const date = new Date(Number(ts) * 1000);
+                        if (!isNaN(date.getTime())) {
+                            birthDate = date.toISOString().split('T')[0]; // YYYY-MM-DD
+                        }
+                    } else {
+                        birthDate = ts; // Already a date string
+                    }
+                }
+
+                return {
+                    id: p.id,
+                    name: p.name || p.name_en || 'Unknown Player',
+                    short_name: p.short_name || null,
+                    team_id: p.team_id || null,
+                    position: p.position || p.position_name || null,
+                    nationality: p.nationality || p.country_name || null,
+                    birth_date: birthDate,
+                    photo: p.logo || p.photo || null,
+                    jersey_number: p.shirt_number || p.jersey_number || null,
+                    market_value: p.market_value || null,
+                    updated_at: new Date().toISOString(),
+                };
+            });
 
             const { error } = await supabase.from('players').upsert(batch, { onConflict: 'id' });
 
