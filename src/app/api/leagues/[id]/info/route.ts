@@ -111,10 +111,7 @@ export async function GET(
         // 2. Get team IDs from top 3 standings
         const top3TeamIds = rows.slice(0, 3).map((row: any) => row.team_id as string);
 
-        // 3. Get stage ID for current matchday
-        const stageId = CURRENT_STAGE_IDS[leagueId];
-
-        // 4. Fetch data in parallel - teams by specific IDs, upcoming matches from API
+        // 3. Fetch data in parallel - teams by specific IDs, upcoming matches from API
         const [teamsResult, upcomingMatchResult] = await Promise.all([
             // Get only the teams we need from Supabase
             top3TeamIds.length > 0
@@ -124,12 +121,12 @@ export async function GET(
                     .in('id', top3TeamIds)
                 : Promise.resolve({ data: [], error: null }),
 
-            // Get matches from TheSports API using stage_id for current matchday
-            stageId
-                ? fetch(`${API_URL}/v1/football/match/list?user=${USERNAME}&secret=${API_KEY}&stage_id=${stageId}`)
+            // Get recent matches from TheSports API using season_id (auto-updates with current season)
+            seasonId
+                ? fetch(`${API_URL}/v1/football/match/season/recent?user=${USERNAME}&secret=${API_KEY}&uuid=${seasonId}`)
                     .then(r => r.json())
                     .catch(err => {
-                        console.error('Match list fetch error:', err);
+                        console.error('Match season/recent fetch error:', err);
                         return null;
                     })
                 : Promise.resolve(null),
