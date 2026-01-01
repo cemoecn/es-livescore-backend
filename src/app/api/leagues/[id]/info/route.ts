@@ -29,6 +29,20 @@ const CURRENT_SEASON_IDS: Record<string, string> = {
     '56ypq3nh0xmd7oj': 'v2y8m4zhl38ql07', // Europa League 2024/25
 };
 
+// Current stage IDs for fetching matchday fixtures
+const CURRENT_STAGE_IDS: Record<string, string> = {
+    'gy0or5jhg6qwzv3': 'y39mp1he8ddmojx', // Bundesliga
+    'jednm9whz0ryox8': '6ypq3nhpo67md7o', // Premier League
+    'l965mkyh32r1ge4': 'jw2r09hgv82rz84', // Championship
+    'vl7oqdehlyr510j': 'dn1m1ghgdd5moep', // La Liga
+    '4zp5rzghp5q82w1': '4wyrn4h5pzlq86p', // Serie A
+    'yl5ergphnzr8k0o': '965mkyh098kr1ge', // Ligue 1
+    'vl7oqdeheyr510j': '1l4rjnhdp4km7vx', // Eredivisie
+    '9vjxm8ghx2r6odg': '965mkyh09vxr1ge', // Primeira Liga
+    'z8yomo4h7wq0j6l': 'dj2ryoh9064q1zp', // Champions League
+    '56ypq3nh0xmd7oj': 'vjxm8gh76d0r6od', // Europa League
+};
+
 // Season info per league (2024/25)
 const SEASON_INFO: Record<string, { totalMatchdays: number; season: string; teamCount: number }> = {
     'gy0or5jhg6qwzv3': { totalMatchdays: 34, season: '2024/25', teamCount: 18 }, // Bundesliga
@@ -97,7 +111,10 @@ export async function GET(
         // 2. Get team IDs from top 3 standings
         const top3TeamIds = rows.slice(0, 3).map((row: any) => row.team_id as string);
 
-        // 3. Fetch data in parallel - teams by specific IDs, upcoming matches from API
+        // 3. Get stage ID for current matchday
+        const stageId = CURRENT_STAGE_IDS[leagueId];
+
+        // 4. Fetch data in parallel - teams by specific IDs, upcoming matches from API
         const [teamsResult, upcomingMatchResult] = await Promise.all([
             // Get only the teams we need from Supabase
             top3TeamIds.length > 0
@@ -107,13 +124,15 @@ export async function GET(
                     .in('id', top3TeamIds)
                 : Promise.resolve({ data: [], error: null }),
 
-            // Get upcoming matches from TheSports API for this league
-            fetch(`${API_URL}/v1/football/match/diary?user=${USERNAME}&secret=${API_KEY}&competition_id=${leagueId}`)
-                .then(r => r.json())
-                .catch(err => {
-                    console.error('Upcoming matches fetch error:', err);
-                    return null;
-                }),
+            // Get matches from TheSports API using stage_id for current matchday
+            stageId
+                ? fetch(`${API_URL}/v1/football/match/list?user=${USERNAME}&secret=${API_KEY}&stage_id=${stageId}`)
+                    .then(r => r.json())
+                    .catch(err => {
+                        console.error('Match list fetch error:', err);
+                        return null;
+                    })
+                : Promise.resolve(null),
         ]);
 
         // Build team lookup map
