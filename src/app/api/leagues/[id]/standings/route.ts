@@ -15,7 +15,7 @@ const USERNAME = process.env.THESPORTS_USERNAME || '';
 const CURRENT_SEASON_IDS: Record<string, string> = {
     'gy0or5jhg6qwzv3': 'e4wyrn4hg8gq86p', // Bundesliga 2024/25
     'jednm9whz0ryox8': 'l965mkyhjpxr1ge', // Premier League 2024/25
-    'l965mkyh32r1ge4': 'gpxwrxlhd12ryk0', // Championship 2024/25
+    'l965mkyh32r1ge4': '56ypq3nhx51md7o', // Championship 2024/25
     'vl7oqdehlyr510j': '56ypq3nhxw7md7o', // La Liga 2024/25
     '4zp5rzghp5q82w1': '4zp5rzghn83q82w', // Serie A 2024/25
     'yl5ergphnzr8k0o': '9dn1m1gh645moep', // Ligue 1 2024/25
