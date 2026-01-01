@@ -15,9 +15,14 @@ const USERNAME = process.env.THESPORTS_USERNAME || '';
 const CURRENT_SEASON_IDS: Record<string, string> = {
     'gy0or5jhg6qwzv3': 'e4wyrn4hg8gq86p', // Bundesliga 2024/25
     'jednm9whz0ryox8': 'l965mkyhjpxr1ge', // Premier League 2024/25
-    'vl7oqdehlyr510j': 'l965mkyhjpxr1ge', // La Liga (temp)
-    '4zp5rzghp5q82w1': 'l965mkyhjpxr1ge', // Serie A (temp)
-    'yl5ergphnzr8k0o': 'e4wyrn4hg8gq86p', // Ligue 1 (temp)
+    'l965mkyh32r1ge4': 'gpxwrxlhd12ryk0', // Championship 2024/25
+    'vl7oqdehlyr510j': 'kdj2ryoh8n5q1zp', // La Liga 2024/25
+    '4zp5rzghp5q82w1': 'kdj2ryoh8xlq1zp', // Serie A 2024/25
+    'yl5ergphnzr8k0o': 'gx7lm7ph407m2wd', // Ligue 1 2024/25
+    'vl7oqdeheyr510j': 'v2y8m4zhlj8ql07', // Eredivisie 2024/25
+    '9vjxm8ghx2r6odg': 'z318q66hlk0qo9j', // Primeira Liga 2024/25
+    'z8yomo4h7wq0j6l': 'v2y8m4zhl38ql07', // Champions League 2024/25
+    '56ypq3nh0xmd7oj': 'gy0or5jhj6qwzv3', // Europa League 2024/25
 };
 
 // Zone configuration per league (positions for CL, EL, ECL, relegation)
