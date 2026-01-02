@@ -95,11 +95,11 @@ const CHAMPIONSHIP_DATA: Record<string, {
         mostTitles: { name: 'Benfica', logo: 'https://img.thesports.com/football/team/b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8.png', count: 38 },
     },
     'z8yomo4h7wq0j6l': { // Champions League
-        lastChampion: { name: 'Real Madrid', logo: 'https://img.thesports.com/football/team/0c68e645b9eab2fd7a1d127a11b41c5e.png', season: '2024/25' },
-        mostTitles: { name: 'Real Madrid', logo: 'https://img.thesports.com/football/team/0c68e645b9eab2fd7a1d127a11b41c5e.png', count: 16 },
+        lastChampion: { name: 'Paris Saint-Germain', logo: 'https://img.thesports.com/football/team/90a7c8dbb8a3c13bb4e56ac5cfa2bfa5.png', season: '2024/25' },
+        mostTitles: { name: 'Real Madrid', logo: 'https://img.thesports.com/football/team/0c68e645b9eab2fd7a1d127a11b41c5e.png', count: 15 },
     },
     '56ypq3nh0xmd7oj': { // Europa League
-        lastChampion: { name: 'Atalanta', logo: 'https://img.thesports.com/football/team/c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9.png', season: '2024/25' },
+        lastChampion: { name: 'Tottenham Hotspur', logo: 'https://img.thesports.com/football/team/4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f.png', season: '2024/25' },
         mostTitles: { name: 'Sevilla', logo: 'https://img.thesports.com/football/team/d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0.png', count: 7 },
     },
 };
