@@ -125,13 +125,32 @@ export async function GET(
             return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
         });
 
-        // Find current round (first round with upcoming matches, status=1)
-        const upcomingRounds = transformedMatches
-            .filter((m: any) => m.status === 1 && m.round != null)
-            .map((m: any) => m.round)
-            .sort((a: number, b: number) => a - b);
-        const currentRound = upcomingRounds.length > 0 ? upcomingRounds[0] :
-            (Math.max(...transformedMatches.map((m: any) => m.round || 0)) || 1);
+        // Find current round - skip postponed games from old matchdays
+        // Logic: Find highest finished round, then get lowest upcoming round after it
+        const finishedRounds = transformedMatches
+            .filter((m: any) => m.status === 8 && m.round != null)
+            .map((m: any) => m.round);
+        const highestFinishedRound = finishedRounds.length > 0
+            ? Math.max(...finishedRounds)
+            : 0;
+
+        // Find upcoming rounds that are after the highest finished round
+        const upcomingRoundsAfterFinished = transformedMatches
+            .filter((m: any) => m.status === 1 && m.round != null && m.round > highestFinishedRound)
+            .map((m: any) => m.round);
+
+        let currentRound: number;
+        if (upcomingRoundsAfterFinished.length > 0) {
+            currentRound = Math.min(...upcomingRoundsAfterFinished);
+        } else {
+            // Fallback: get any upcoming round
+            const allUpcomingRounds = transformedMatches
+                .filter((m: any) => m.status === 1 && m.round != null)
+                .map((m: any) => m.round);
+            currentRound = allUpcomingRounds.length > 0
+                ? Math.min(...allUpcomingRounds)
+                : (Math.max(...transformedMatches.map((m: any) => m.round || 0)) || 1);
+        }
 
         return NextResponse.json({
             success: true,
