@@ -28,22 +28,41 @@ const CURRENT_SEASON_IDS: Record<string, string> = {
 
 // German translations for promotion names from API
 const PROMOTION_LABELS: Record<string, string> = {
+    // Champions League
     'Champions League league stage': 'UEFA Champions League',
     'Champions League': 'UEFA Champions League',
     'CL Group': 'UEFA Champions League',
+    'CL league stage': 'UEFA Champions League',
+    // Europa League
     'Europa League league stage': 'UEFA Europa League',
     'Europa League': 'UEFA Europa League',
     'EL Group': 'UEFA Europa League',
+    'EL league stage': 'UEFA Europa League',
+    // Conference League (many variants)
     'UEFA ECL Qualification': 'UEFA Conference League',
+    'UEFA ECL Playoffs': 'UEFA Conference League',
+    'UEFA ECL qualifying playoffs': 'UEFA Conference League',
     'Conference League': 'UEFA Conference League',
     'ECL Qualification': 'UEFA Conference League',
+    'ECL qualifying playoffs': 'UEFA Conference League',
+    'ECL Playoffs': 'UEFA Conference League',
+    // Relegation
     'Relegation Playoffs': 'Relegation',
     'Relegation playoffs': 'Relegation',
+    'Relegation Playoff': 'Relegation',
+    // Abstieg
     'Degrade Team': 'Abstieg',
     'Relegation': 'Abstieg',
+    'Relegated': 'Abstieg',
+    // Aufstieg
     'Promoted': 'Direkter Aufstieg',
+    'Promotion': 'Direkter Aufstieg',
+    'Direct Promotion': 'Direkter Aufstieg',
+    // Playoffs
     'Promotion Playoffs': 'Aufstiegs-Playoffs',
     'Promotion playoffs': 'Aufstiegs-Playoffs',
+    'Promotion Playoff': 'Aufstiegs-Playoffs',
+    // UEFA Wettbewerbe Runden
     'Round of 16': 'Achtelfinale',
     'Knockout stage playoffs': 'Playoffs',
     'Eliminated': 'Ausgeschieden',
