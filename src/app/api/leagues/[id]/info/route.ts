@@ -165,6 +165,7 @@ export async function GET(
         // Logic: One team in Top 3, opponent in middle-to-upper table half
         // IMPORTANT: Only from current (next) matchday
         let topMatch = null;
+        let calculatedCurrentRound = currentMatchday; // Default to table-based matchday
         const upcomingMatches = upcomingMatchResult?.results || [];
 
         if (upcomingMatches.length > 0 && rows.length > 0) {
@@ -218,6 +219,9 @@ export async function GET(
                     .map((m: any) => m.round.round_num);
                 currentRound = finishedRounds.length > 0 ? Math.max(...finishedRounds) : 1;
             }
+
+            // Store the calculated current round for seasonProgress
+            calculatedCurrentRound = currentRound;
 
             // Filter to only matches from the current round
             const currentRoundMatches = currentRound
@@ -378,10 +382,10 @@ export async function GET(
             data: {
                 seasonProgress: {
                     season: seasonInfo.season,
-                    currentMatchday,
+                    currentMatchday: calculatedCurrentRound,
                     totalMatchdays: seasonInfo.totalMatchdays,
                     teamsCount: seasonInfo.teamCount,
-                    progressPercent: Math.round((currentMatchday / seasonInfo.totalMatchdays) * 100),
+                    progressPercent: Math.round((calculatedCurrentRound / seasonInfo.totalMatchdays) * 100),
                 },
                 standings: top3Standings,
                 topMatch,
