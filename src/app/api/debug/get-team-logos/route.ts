@@ -12,11 +12,10 @@ const USERNAME = process.env.THESPORTS_USERNAME || '';
 
 // Teams that need logos
 const TEAM_NAMES = [
-    'Leeds United', 'Leicester City', // Championship
-    'PSV', 'Ajax', // Eredivisie
-    'Sporting CP', 'Benfica', // Primeira Liga
-    'Real Madrid', // CL
-    'Atalanta', 'Sevilla', // EL
+    'Leicester', // Try broader for Leicester
+    'AFC Ajax', // Try specific for Ajax
+    'Feyenoord', // Alternative for Eredivisie
+    'FC Porto', // Alternative for Primeira
 ];
 
 export async function GET() {
