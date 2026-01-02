@@ -180,34 +180,43 @@ export async function GET(
             // Filter upcoming matches only (status_id 1 = upcoming)
             const upcomingOnly = upcomingMatches.filter((m: any) => m.status_id === 1);
 
-            // Find finished matches (status_id 8 = finished)
-            const finishedMatches = upcomingMatches.filter((m: any) => m.status_id === 8);
+            // Find current round - based on EARLIEST upcoming match date per round
+            // This handles pre-scheduled games (e.g., Round 19 games played before Round 18)
+            const now = Date.now();
 
-            // Find the highest round that has finished matches
-            const finishedRounds = finishedMatches
-                .map((m: any) => m.round?.round_num)
-                .filter((r: any) => r != null);
-            const highestFinishedRound = finishedRounds.length > 0
-                ? Math.max(...finishedRounds)
-                : 0;
-
-            // Find upcoming rounds that are after the highest finished round
-            const upcomingRounds = upcomingOnly
-                .map((m: any) => m.round?.round_num)
-                .filter((r: any) => r != null && r > highestFinishedRound);
-
-            // Current round = lowest upcoming round that's after finished rounds
-            // If no such round exists, fall back to lowest upcoming round
-            let currentRound: number | null = null;
-            if (upcomingRounds.length > 0) {
-                currentRound = Math.min(...upcomingRounds);
-            } else {
-                const allUpcomingRounds = upcomingOnly
-                    .map((m: any) => m.round?.round_num)
-                    .filter((r: any) => r != null);
-                if (allUpcomingRounds.length > 0) {
-                    currentRound = Math.min(...allUpcomingRounds);
+            // Find the earliest upcoming match date for each round
+            const roundFirstMatchDate = new Map<number, number>();
+            for (const match of upcomingOnly) {
+                if (match.match_time && match.round?.round_num) {
+                    const matchTime = match.match_time * 1000; // Convert to ms
+                    const roundNum = match.round.round_num;
+                    const existingTime = roundFirstMatchDate.get(roundNum);
+                    if (!existingTime || matchTime < existingTime) {
+                        roundFirstMatchDate.set(roundNum, matchTime);
+                    }
                 }
+            }
+
+            // Find the round whose first upcoming match is soonest (>=now or closest to now)
+            let currentRound: number | null = null;
+            let closestTime = Infinity;
+
+            for (const [roundNum, firstMatchTime] of roundFirstMatchDate.entries()) {
+                // Only consider matches in the future or very recent (within last 3 hours for live games)
+                if (firstMatchTime >= now - 3 * 60 * 60 * 1000) {
+                    if (firstMatchTime < closestTime) {
+                        closestTime = firstMatchTime;
+                        currentRound = roundNum;
+                    }
+                }
+            }
+
+            // Fallback if no upcoming matches found
+            if (!currentRound) {
+                const finishedRounds = upcomingMatches
+                    .filter((m: any) => m.status_id === 8 && m.round?.round_num)
+                    .map((m: any) => m.round.round_num);
+                currentRound = finishedRounds.length > 0 ? Math.max(...finishedRounds) : 1;
             }
 
             // Filter to only matches from the current round
