@@ -86,10 +86,15 @@ export async function GET(
         }
 
         // Transform matches with team info
+        // API Status IDs: 1 = upcoming, 8 = finished
         const transformedMatches = matches.map((match: any) => {
             const homeTeam = teamMap.get(match.home_team_id) || { name: 'Home', logo: '' };
             const awayTeam = teamMap.get(match.away_team_id) || { name: 'Away', logo: '' };
             const matchTime = match.match_time ? new Date(match.match_time * 1000) : null;
+
+            // Extract scores from home_scores[0] and away_scores[0] arrays
+            const homeScore = match.home_scores?.[0] ?? null;
+            const awayScore = match.away_scores?.[0] ?? null;
 
             return {
                 id: match.id,
@@ -97,13 +102,13 @@ export async function GET(
                     id: match.home_team_id,
                     name: homeTeam.name,
                     logo: homeTeam.logo,
-                    score: match.home_score ?? null,
+                    score: homeScore,
                 },
                 awayTeam: {
                     id: match.away_team_id,
                     name: awayTeam.name,
                     logo: awayTeam.logo,
-                    score: match.away_score ?? null,
+                    score: awayScore,
                 },
                 startTime: matchTime?.toISOString() || null,
                 date: matchTime?.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' }) || null,
