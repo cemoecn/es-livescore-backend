@@ -74,26 +74,22 @@ export async function GET(
         // Fetch team info from Supabase
         const { data: teamsData } = await supabase
             .from('teams')
-            .select('id, name, short_name, logo')
+            .select('id, name, logo')
             .in('id', Array.from(teamIds));
 
         // Build team lookup map
-        const teamMap = new Map<string, { name: string; shortName: string; logo: string }>();
+        const teamMap = new Map<string, { name: string; logo: string }>();
         if (teamsData) {
             for (const team of teamsData) {
-                teamMap.set(team.id, {
-                    name: team.name,
-                    shortName: team.short_name || team.name,
-                    logo: team.logo || ''
-                });
+                teamMap.set(team.id, { name: team.name, logo: team.logo || '' });
             }
         }
 
         // Transform matches with team info
         // API Status IDs: 1 = upcoming, 8 = finished
         const transformedMatches = matches.map((match: any) => {
-            const homeTeam = teamMap.get(match.home_team_id) || { name: 'Home', shortName: 'HOM', logo: '' };
-            const awayTeam = teamMap.get(match.away_team_id) || { name: 'Away', shortName: 'AWA', logo: '' };
+            const homeTeam = teamMap.get(match.home_team_id) || { name: 'Home', logo: '' };
+            const awayTeam = teamMap.get(match.away_team_id) || { name: 'Away', logo: '' };
             const matchTime = match.match_time ? new Date(match.match_time * 1000) : null;
 
             // Extract scores from home_scores[0] and away_scores[0] arrays
@@ -105,14 +101,12 @@ export async function GET(
                 homeTeam: {
                     id: match.home_team_id,
                     name: homeTeam.name,
-                    shortName: homeTeam.shortName,
                     logo: homeTeam.logo,
                     score: homeScore,
                 },
                 awayTeam: {
                     id: match.away_team_id,
                     name: awayTeam.name,
-                    shortName: awayTeam.shortName,
                     logo: awayTeam.logo,
                     score: awayScore,
                 },
@@ -131,31 +125,48 @@ export async function GET(
             return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
         });
 
-        // Find current round - skip postponed games from old matchdays
-        // Logic: Find highest finished round, then get lowest upcoming round after it
-        const finishedRounds = transformedMatches
-            .filter((m: any) => m.status === 8 && m.round != null)
-            .map((m: any) => m.round);
-        const highestFinishedRound = finishedRounds.length > 0
-            ? Math.max(...finishedRounds)
-            : 0;
+        // Find current round - based on EARLIEST upcoming match date per round
+        // This handles pre-scheduled games (e.g., Round 19 games played before Round 18)
+        const now = Date.now();
 
-        // Find upcoming rounds that are after the highest finished round
-        const upcomingRoundsAfterFinished = transformedMatches
-            .filter((m: any) => m.status === 1 && m.round != null && m.round > highestFinishedRound)
-            .map((m: any) => m.round);
+        // Get upcoming matches with their dates
+        const upcomingMatches = transformedMatches.filter((m: any) =>
+            m.status === 1 && m.round != null && m.startTime
+        );
 
-        let currentRound: number;
-        if (upcomingRoundsAfterFinished.length > 0) {
-            currentRound = Math.min(...upcomingRoundsAfterFinished);
-        } else {
-            // Fallback: get any upcoming round
-            const allUpcomingRounds = transformedMatches
-                .filter((m: any) => m.status === 1 && m.round != null)
+        // Find the earliest upcoming match date for each round
+        const roundFirstMatchDate = new Map<number, number>();
+        for (const match of upcomingMatches) {
+            const matchTime = new Date(match.startTime).getTime();
+            const round = match.round;
+            const existingTime = roundFirstMatchDate.get(round);
+            if (!existingTime || matchTime < existingTime) {
+                roundFirstMatchDate.set(round, matchTime);
+            }
+        }
+
+        // Find the round whose first upcoming match is soonest (>=now or closest to now)
+        let currentRound = 1;
+        let closestTime = Infinity;
+
+        for (const [round, firstMatchTime] of roundFirstMatchDate.entries()) {
+            // Only consider matches in the future or very recent (within last 3 hours for live games)
+            if (firstMatchTime >= now - 3 * 60 * 60 * 1000) {
+                if (firstMatchTime < closestTime) {
+                    closestTime = firstMatchTime;
+                    currentRound = round;
+                }
+            }
+        }
+
+        // Fallback if no upcoming matches found
+        if (closestTime === Infinity) {
+            const finishedRounds = transformedMatches
+                .filter((m: any) => m.status === 8 && m.round != null)
                 .map((m: any) => m.round);
-            currentRound = allUpcomingRounds.length > 0
-                ? Math.min(...allUpcomingRounds)
-                : (Math.max(...transformedMatches.map((m: any) => m.round || 0)) || 1);
+            currentRound = finishedRounds.length > 0
+                ? Math.max(...finishedRounds)
+                : 1;
         }
 
         return NextResponse.json({
