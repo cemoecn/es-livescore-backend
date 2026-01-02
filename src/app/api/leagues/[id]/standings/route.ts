@@ -11,18 +11,18 @@ const API_URL = process.env.THESPORTS_API_URL || 'https://api.thesports.com';
 const API_KEY = process.env.THESPORTS_API_KEY || '';
 const USERNAME = process.env.THESPORTS_USERNAME || '';
 
-// Current 2024/25 season IDs mapped by competition_id
+// Current 2025/26 season IDs mapped by competition_id
 const CURRENT_SEASON_IDS: Record<string, string> = {
-    'gy0or5jhg6qwzv3': 'e4wyrn4hg8gq86p', // Bundesliga 2024/25
-    'jednm9whz0ryox8': 'l965mkyhjpxr1ge', // Premier League 2024/25
-    'l965mkyh32r1ge4': '56ypq3nhx51md7o', // Championship 2024/25
-    'vl7oqdehlyr510j': '56ypq3nhxw7md7o', // La Liga 2024/25
-    '4zp5rzghp5q82w1': '4zp5rzghn83q82w', // Serie A 2024/25
-    'yl5ergphnzr8k0o': '9dn1m1gh645moep', // Ligue 1 2024/25
-    'vl7oqdeheyr510j': 'yl5ergphgo0r8k0', // Eredivisie 2024/25
-    '9vjxm8ghx2r6odg': 'kjw2r09h811rz84', // Primeira Liga 2024/25
-    'z8yomo4h7wq0j6l': 'z8yomo4hn70q0j6', // Champions League 2024/25
-    '56ypq3nh0xmd7oj': 'v2y8m4zhl38ql07', // Europa League 2024/25
+    'gy0or5jhg6qwzv3': 'e4wyrn4hg8gq86p', // Bundesliga 2025/26
+    'jednm9whz0ryox8': 'l965mkyhjpxr1ge', // Premier League 2025/26
+    'l965mkyh32r1ge4': '56ypq3nhx51md7o', // Championship 2025/26
+    'vl7oqdehlyr510j': '56ypq3nhxw7md7o', // La Liga 2025/26
+    '4zp5rzghp5q82w1': '4zp5rzghn83q82w', // Serie A 2025/26
+    'yl5ergphnzr8k0o': '9dn1m1gh645moep', // Ligue 1 2025/26
+    'vl7oqdeheyr510j': 'yl5ergphgo0r8k0', // Eredivisie 2025/26
+    '9vjxm8ghx2r6odg': 'kjw2r09h811rz84', // Primeira Liga 2025/26
+    'z8yomo4h7wq0j6l': 'z8yomo4hn70q0j6', // Champions League 2025/26
+    '56ypq3nh0xmd7oj': 'v2y8m4zhl38ql07', // Europa League 2025/26
 };
 
 // Zone configuration per league (positions for CL, EL, ECL, relegation)

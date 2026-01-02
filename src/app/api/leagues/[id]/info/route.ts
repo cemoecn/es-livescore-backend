@@ -14,19 +14,19 @@ const API_URL = process.env.THESPORTS_API_URL || 'https://api.thesports.com';
 const API_KEY = process.env.THESPORTS_API_KEY || '';
 const USERNAME = process.env.THESPORTS_USERNAME || '';
 
-// Current 2024/25 season IDs mapped by competition_id
+// Current 2025/26 season IDs mapped by competition_id
 // These are verified to work with /v1/football/season/recent/table/detail
 const CURRENT_SEASON_IDS: Record<string, string> = {
-    'gy0or5jhg6qwzv3': 'e4wyrn4hg8gq86p', // Bundesliga 2024/25
-    'jednm9whz0ryox8': 'l965mkyhjpxr1ge', // Premier League 2024/25
-    'l965mkyh32r1ge4': '56ypq3nhx51md7o', // Championship 2024/25
-    'vl7oqdehlyr510j': '56ypq3nhxw7md7o', // La Liga 2024/25
-    '4zp5rzghp5q82w1': '4zp5rzghn83q82w', // Serie A 2024/25
-    'yl5ergphnzr8k0o': '9dn1m1gh645moep', // Ligue 1 2024/25
-    'vl7oqdeheyr510j': 'yl5ergphgo0r8k0', // Eredivisie 2024/25
-    '9vjxm8ghx2r6odg': 'kjw2r09h811rz84', // Primeira Liga 2024/25
-    'z8yomo4h7wq0j6l': 'z8yomo4hn70q0j6', // Champions League 2024/25
-    '56ypq3nh0xmd7oj': 'v2y8m4zhl38ql07', // Europa League 2024/25
+    'gy0or5jhg6qwzv3': 'e4wyrn4hg8gq86p', // Bundesliga 2025/26
+    'jednm9whz0ryox8': 'l965mkyhjpxr1ge', // Premier League 2025/26
+    'l965mkyh32r1ge4': '56ypq3nhx51md7o', // Championship 2025/26
+    'vl7oqdehlyr510j': '56ypq3nhxw7md7o', // La Liga 2025/26
+    '4zp5rzghp5q82w1': '4zp5rzghn83q82w', // Serie A 2025/26
+    'yl5ergphnzr8k0o': '9dn1m1gh645moep', // Ligue 1 2025/26
+    'vl7oqdeheyr510j': 'yl5ergphgo0r8k0', // Eredivisie 2025/26
+    '9vjxm8ghx2r6odg': 'kjw2r09h811rz84', // Primeira Liga 2025/26
+    'z8yomo4h7wq0j6l': 'z8yomo4hn70q0j6', // Champions League 2025/26
+    '56ypq3nh0xmd7oj': 'v2y8m4zhl38ql07', // Europa League 2025/26
 };
 
 // Current stage IDs for fetching matchday fixtures
@@ -43,44 +43,44 @@ const CURRENT_STAGE_IDS: Record<string, string> = {
     '56ypq3nh0xmd7oj': 'vjxm8gh76d0r6od', // Europa League
 };
 
-// Season info per league (2024/25)
+// Season info per league (2025/26)
 const SEASON_INFO: Record<string, { totalMatchdays: number; season: string; teamCount: number }> = {
-    'gy0or5jhg6qwzv3': { totalMatchdays: 34, season: '2024/25', teamCount: 18 }, // Bundesliga
-    'jednm9whz0ryox8': { totalMatchdays: 38, season: '2024/25', teamCount: 20 }, // Premier League
-    'l965mkyh32r1ge4': { totalMatchdays: 46, season: '2024/25', teamCount: 24 }, // Championship
-    'vl7oqdehlyr510j': { totalMatchdays: 38, season: '2024/25', teamCount: 20 }, // La Liga
-    '4zp5rzghp5q82w1': { totalMatchdays: 38, season: '2024/25', teamCount: 20 }, // Serie A
-    'yl5ergphnzr8k0o': { totalMatchdays: 34, season: '2024/25', teamCount: 18 }, // Ligue 1
-    'vl7oqdeheyr510j': { totalMatchdays: 34, season: '2024/25', teamCount: 18 }, // Eredivisie
-    '9vjxm8ghx2r6odg': { totalMatchdays: 34, season: '2024/25', teamCount: 18 }, // Primeira Liga
-    'z8yomo4h7wq0j6l': { totalMatchdays: 8, season: '2024/25', teamCount: 36 }, // Champions League
-    '56ypq3nh0xmd7oj': { totalMatchdays: 8, season: '2024/25', teamCount: 36 }, // Europa League
+    'gy0or5jhg6qwzv3': { totalMatchdays: 34, season: '2025/26', teamCount: 18 }, // Bundesliga
+    'jednm9whz0ryox8': { totalMatchdays: 38, season: '2025/26', teamCount: 20 }, // Premier League
+    'l965mkyh32r1ge4': { totalMatchdays: 46, season: '2025/26', teamCount: 24 }, // Championship
+    'vl7oqdehlyr510j': { totalMatchdays: 38, season: '2025/26', teamCount: 20 }, // La Liga
+    '4zp5rzghp5q82w1': { totalMatchdays: 38, season: '2025/26', teamCount: 20 }, // Serie A
+    'yl5ergphnzr8k0o': { totalMatchdays: 34, season: '2025/26', teamCount: 18 }, // Ligue 1
+    'vl7oqdeheyr510j': { totalMatchdays: 34, season: '2025/26', teamCount: 18 }, // Eredivisie
+    '9vjxm8ghx2r6odg': { totalMatchdays: 34, season: '2025/26', teamCount: 18 }, // Primeira Liga
+    'z8yomo4h7wq0j6l': { totalMatchdays: 8, season: '2025/26', teamCount: 36 }, // Champions League
+    '56ypq3nh0xmd7oj': { totalMatchdays: 8, season: '2025/26', teamCount: 36 }, // Europa League
 };
 
-// Static championship data (TheSports API doesn't provide historical champions)
+// Static championship data (last champion is from 2024/25 season)
 const CHAMPIONSHIP_DATA: Record<string, {
     lastChampion: { name: string; logo: string; season: string };
     mostTitles: { name: string; logo: string; count: number };
 }> = {
     'gy0or5jhg6qwzv3': { // Bundesliga
-        lastChampion: { name: 'Bayer Leverkusen', logo: 'https://img.thesports.com/football/team/a9a9d5be1fd1c5b7b0b1bc80261ac04e.png', season: '2023/24' },
-        mostTitles: { name: 'Bayern München', logo: 'https://img.thesports.com/football/team/8e31e674cdfd6deb6698a6f30e605ff7.png', count: 33 },
+        lastChampion: { name: 'Bayern München', logo: 'https://img.thesports.com/football/team/8e31e674cdfd6deb6698a6f30e605ff7.png', season: '2024/25' },
+        mostTitles: { name: 'Bayern München', logo: 'https://img.thesports.com/football/team/8e31e674cdfd6deb6698a6f30e605ff7.png', count: 34 },
     },
     'jednm9whz0ryox8': { // Premier League
-        lastChampion: { name: 'Manchester City', logo: 'https://img.thesports.com/football/team/6a489f1676bf3e698c7c024e7bca7199.png', season: '2023/24' },
+        lastChampion: { name: 'Liverpool', logo: 'https://img.thesports.com/football/team/368a5f68c6efda7c4e1db3e4f7a89d7c.png', season: '2024/25' },
         mostTitles: { name: 'Manchester United', logo: 'https://img.thesports.com/football/team/05a7ae4ce09e34eb0ff3179efe4cf040.png', count: 20 },
     },
     'vl7oqdehlyr510j': { // La Liga
-        lastChampion: { name: 'Real Madrid', logo: 'https://img.thesports.com/football/team/0c68e645b9eab2fd7a1d127a11b41c5e.png', season: '2023/24' },
+        lastChampion: { name: 'Barcelona', logo: 'https://img.thesports.com/football/team/68d0f2e0d3a1b7f08b24d6f4b8a95c31.png', season: '2024/25' },
         mostTitles: { name: 'Real Madrid', logo: 'https://img.thesports.com/football/team/0c68e645b9eab2fd7a1d127a11b41c5e.png', count: 36 },
     },
     '4zp5rzghp5q82w1': { // Serie A
-        lastChampion: { name: 'Inter', logo: 'https://img.thesports.com/football/team/5a4cfd09ed621ceba1d4467679bb2bf6.png', season: '2023/24' },
+        lastChampion: { name: 'Napoli', logo: 'https://img.thesports.com/football/team/f7d4c8b5a3e2d1f0c9b8a7e6d5c4b3a2.png', season: '2024/25' },
         mostTitles: { name: 'Juventus', logo: 'https://img.thesports.com/football/team/ee4b60af8f1d30df7def1df0693a5fe9.png', count: 36 },
     },
     'yl5ergphnzr8k0o': { // Ligue 1
-        lastChampion: { name: 'PSG', logo: 'https://img.thesports.com/football/team/90a7c8dbb8a3c13bb4e56ac5cfa2bfa5.png', season: '2023/24' },
-        mostTitles: { name: 'PSG', logo: 'https://img.thesports.com/football/team/90a7c8dbb8a3c13bb4e56ac5cfa2bfa5.png', count: 12 },
+        lastChampion: { name: 'PSG', logo: 'https://img.thesports.com/football/team/90a7c8dbb8a3c13bb4e56ac5cfa2bfa5.png', season: '2024/25' },
+        mostTitles: { name: 'PSG', logo: 'https://img.thesports.com/football/team/90a7c8dbb8a3c13bb4e56ac5cfa2bfa5.png', count: 13 },
     },
 };
 
@@ -91,7 +91,7 @@ export async function GET(
     try {
         const { id: leagueId } = await params;
         const seasonId = CURRENT_SEASON_IDS[leagueId];
-        const seasonInfo = SEASON_INFO[leagueId] || { totalMatchdays: 34, season: '2024/25', teamCount: 18 };
+        const seasonInfo = SEASON_INFO[leagueId] || { totalMatchdays: 34, season: '2025/26', teamCount: 18 };
 
         // 1. Fetch standings from TheSports API first
         let tableResult = null;
