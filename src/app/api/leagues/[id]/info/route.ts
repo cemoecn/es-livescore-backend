@@ -355,14 +355,23 @@ export async function GET(
         let championships = null;
         const additionalData = competitionAdditional?.results?.[0];
         if (additionalData) {
-            // Parse title_holder (current champion)
-            const titleHolder = additionalData.title_holder;
-            // Parse most_titles (record champion)
-            const mostTitles = additionalData.most_titles;
+            // API format: title_holder = [team_id, title_count]
+            // API format: most_titles = [[team_ids], count]
+            const titleHolderRaw = additionalData.title_holder;
+            const mostTitlesRaw = additionalData.most_titles;
 
-            if (titleHolder || mostTitles) {
+            // Extract team_id and count from array format
+            const titleHolderTeamId = Array.isArray(titleHolderRaw) ? titleHolderRaw[0] : null;
+            const titleHolderCount = Array.isArray(titleHolderRaw) ? titleHolderRaw[1] : 0;
+
+            const mostTitlesTeamId = Array.isArray(mostTitlesRaw) && Array.isArray(mostTitlesRaw[0])
+                ? mostTitlesRaw[0][0]
+                : null;
+            const mostTitlesCount = Array.isArray(mostTitlesRaw) ? mostTitlesRaw[1] : 0;
+
+            if (titleHolderTeamId || mostTitlesTeamId) {
                 // Need to look up team names from Supabase for these team IDs
-                const championTeamIds = [titleHolder?.team_id, mostTitles?.team_id].filter(id => id);
+                const championTeamIds = [titleHolderTeamId, mostTitlesTeamId].filter(id => id);
                 let championTeamMap = new Map<string, { name: string; logo: string }>();
 
                 if (championTeamIds.length > 0) {
@@ -378,19 +387,19 @@ export async function GET(
                     }
                 }
 
-                const lastChampionTeam = titleHolder?.team_id ? championTeamMap.get(titleHolder.team_id) : null;
-                const mostTitlesTeam = mostTitles?.team_id ? championTeamMap.get(mostTitles.team_id) : null;
+                const lastChampionTeam = titleHolderTeamId ? championTeamMap.get(titleHolderTeamId) : null;
+                const mostTitlesTeam = mostTitlesTeamId ? championTeamMap.get(mostTitlesTeamId) : null;
 
                 championships = {
                     lastChampion: lastChampionTeam ? {
                         name: lastChampionTeam.name,
                         logo: lastChampionTeam.logo,
-                        season: titleHolder?.season || '2024/25',
+                        season: '2024/25', // Current season's champion
                     } : null,
                     mostTitles: mostTitlesTeam ? {
                         name: mostTitlesTeam.name,
                         logo: mostTitlesTeam.logo,
-                        count: mostTitles?.count || 0,
+                        count: mostTitlesCount || 0,
                     } : null,
                 };
             }
