@@ -359,8 +359,9 @@ export async function GET(
                 };
             }
         }
-
-
+        // Extract colors from competition additional data
+        const primaryColor = additionalData?.primary_color || null;
+        const secondaryColor = additionalData?.secondary_color || null;
 
         return NextResponse.json({
             success: true,
@@ -375,6 +376,8 @@ export async function GET(
                 standings: top3Standings,
                 topMatch,
                 championships,
+                primaryColor,
+                secondaryColor,
             },
             debug: {
                 seasonId,
