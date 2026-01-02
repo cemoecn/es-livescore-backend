@@ -25,26 +25,80 @@ const CURRENT_SEASON_IDS: Record<string, string> = {
     '56ypq3nh0xmd7oj': 'v2y8m4zhl38ql07', // Europa League 2025/26
 };
 
-// Zone configuration per league (positions for CL, EL, ECL, relegation)
-const LEAGUE_ZONES: Record<string, { cl: number[]; el: number[]; ecl: number[]; relegation: number[] }> = {
-    'gy0or5jhg6qwzv3': { cl: [1, 2, 3, 4], el: [5, 6], ecl: [7], relegation: [16, 17, 18] }, // Bundesliga
-    'jednm9whz0ryox8': { cl: [1, 2, 3, 4], el: [5], ecl: [6], relegation: [18, 19, 20] }, // Premier League
-    'l965mkyh32r1ge4': { cl: [], el: [], ecl: [], relegation: [22, 23, 24] }, // Championship (promotion 1-2, playoffs 3-6)
-    'vl7oqdehlyr510j': { cl: [1, 2, 3, 4], el: [5, 6], ecl: [], relegation: [18, 19, 20] }, // La Liga
-    '4zp5rzghp5q82w1': { cl: [1, 2, 3, 4], el: [5], ecl: [6], relegation: [18, 19, 20] }, // Serie A
-    'yl5ergphnzr8k0o': { cl: [1, 2, 3], el: [4], ecl: [5], relegation: [16, 17, 18] }, // Ligue 1
-    'vl7oqdeheyr510j': { cl: [1], el: [2, 3], ecl: [], relegation: [16, 17, 18] }, // Eredivisie
-    '9vjxm8ghx2r6odg': { cl: [1, 2], el: [3], ecl: [4], relegation: [16, 17, 18] }, // Primeira Liga
+// Zone configuration per league (positions for CL, EL, ECL, relegation playoff, relegation, promotion)
+// Based on 2025/26 season rules
+const LEAGUE_ZONES: Record<string, {
+    cl: number[];
+    el: number[];
+    ecl: number[];
+    relegation_playoff: number[];
+    relegation: number[];
+    promotion: number[];
+    promotion_playoff: number[];
+}> = {
+    // Bundesliga (18 teams): 1-4 CL, 5 EL, 6 ECL Playoff, 16 Rel Playoff, 17-18 Abstieg
+    'gy0or5jhg6qwzv3': {
+        cl: [1, 2, 3, 4], el: [5], ecl: [6],
+        relegation_playoff: [16], relegation: [17, 18],
+        promotion: [], promotion_playoff: []
+    },
+    // Premier League (20 teams): 1-4 CL, 5 EL, 6 ECL, 18-20 Abstieg
+    'jednm9whz0ryox8': {
+        cl: [1, 2, 3, 4], el: [5], ecl: [6],
+        relegation_playoff: [], relegation: [18, 19, 20],
+        promotion: [], promotion_playoff: []
+    },
+    // Championship (24 teams): 1-2 Aufstieg, 3-6 Playoffs, 22-24 Abstieg
+    'l965mkyh32r1ge4': {
+        cl: [], el: [], ecl: [],
+        relegation_playoff: [], relegation: [22, 23, 24],
+        promotion: [1, 2], promotion_playoff: [3, 4, 5, 6]
+    },
+    // La Liga (20 teams): 1-4 CL, 5-6 EL, 7 ECL Playoff, 18-20 Abstieg
+    'vl7oqdehlyr510j': {
+        cl: [1, 2, 3, 4], el: [5, 6], ecl: [7],
+        relegation_playoff: [], relegation: [18, 19, 20],
+        promotion: [], promotion_playoff: []
+    },
+    // Serie A (20 teams): 1-4 CL, 5 EL, 6 ECL, 18-20 Abstieg
+    '4zp5rzghp5q82w1': {
+        cl: [1, 2, 3, 4], el: [5], ecl: [6],
+        relegation_playoff: [], relegation: [18, 19, 20],
+        promotion: [], promotion_playoff: []
+    },
+    // Ligue 1 (18 teams): 1-3 CL, 4 EL, 5 ECL Playoff, 16 Rel Playoff, 17-18 Abstieg
+    'yl5ergphnzr8k0o': {
+        cl: [1, 2, 3], el: [4], ecl: [5],
+        relegation_playoff: [16], relegation: [17, 18],
+        promotion: [], promotion_playoff: []
+    },
+    // Eredivisie (18 teams): 1 CL, 2-3 CL Quali, 4 ECL Playoff, 16 Rel Playoff, 17-18 Abstieg
+    'vl7oqdeheyr510j': {
+        cl: [1, 2, 3], el: [], ecl: [4],
+        relegation_playoff: [16], relegation: [17, 18],
+        promotion: [], promotion_playoff: []
+    },
+    // Primeira Liga (18 teams): 1-2 CL, 3 CL Quali, 4 ECL Playoff, 16 Rel Playoff, 17-18 Abstieg
+    '9vjxm8ghx2r6odg': {
+        cl: [1, 2, 3], el: [4], ecl: [5],
+        relegation_playoff: [16], relegation: [17, 18],
+        promotion: [], promotion_playoff: []
+    },
 };
 
-function getZone(position: number, leagueId: string): 'cl' | 'el' | 'ecl' | 'relegation' | null {
+type ZoneType = 'cl' | 'el' | 'ecl' | 'relegation_playoff' | 'relegation' | 'promotion' | 'promotion_playoff' | null;
+
+function getZone(position: number, leagueId: string): ZoneType {
     const zones = LEAGUE_ZONES[leagueId];
     if (!zones) return null;
 
     if (zones.cl.includes(position)) return 'cl';
     if (zones.el.includes(position)) return 'el';
     if (zones.ecl.includes(position)) return 'ecl';
+    if (zones.relegation_playoff.includes(position)) return 'relegation_playoff';
     if (zones.relegation.includes(position)) return 'relegation';
+    if (zones.promotion.includes(position)) return 'promotion';
+    if (zones.promotion_playoff.includes(position)) return 'promotion_playoff';
     return null;
 }
 
