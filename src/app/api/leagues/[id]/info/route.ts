@@ -179,56 +179,112 @@ export async function GET(
         }
 
         // Find top match from TheSports API response
+        // Logic: One team in Top 3, opponent in middle-to-upper table half
         let topMatch = null;
         const upcomingMatches = upcomingMatchResult?.results || [];
-        if (upcomingMatches.length > 0) {
-            // Get first upcoming match
-            const match = upcomingMatches[0];
-            const matchDate = new Date(match.match_time * 1000); // Unix timestamp to Date
 
-            // Get team info from lookup or use IDs as fallback
-            const homeTeamInfo = teamMap.get(match.home_team_id) || { name: 'Home', logo: '' };
-            const awayTeamInfo = teamMap.get(match.away_team_id) || { name: 'Away', logo: '' };
+        if (upcomingMatches.length > 0 && rows.length > 0) {
+            // Build position map from standings (team_id -> position)
+            const positionMap = new Map<string, number>();
+            rows.forEach((row: any) => {
+                positionMap.set(row.team_id, row.position);
+            });
 
-            // Need to fetch team info for the match teams if not in top 3
-            let homeTeam = homeTeamInfo;
-            let awayTeam = awayTeamInfo;
+            const teamCount = seasonInfo?.teamCount || 18;
+            const upperHalfLimit = Math.ceil(teamCount / 2); // Top 50% of table
 
-            // If teams not found, try to fetch from Supabase
-            if (homeTeam.name === 'Home' || awayTeam.name === 'Away') {
-                const matchTeamIds = [match.home_team_id, match.away_team_id].filter(id => id);
-                if (matchTeamIds.length > 0) {
-                    const { data: matchTeamsData } = await supabase
-                        .from('teams')
-                        .select('id, name, logo')
-                        .in('id', matchTeamIds);
+            // Filter upcoming matches only (status_id 1 = upcoming)
+            const upcomingOnly = upcomingMatches.filter((m: any) => m.status_id === 1);
 
-                    if (matchTeamsData) {
-                        for (const t of matchTeamsData) {
-                            if (t.id === match.home_team_id) {
-                                homeTeam = { name: t.name, logo: t.logo || '' };
-                            }
-                            if (t.id === match.away_team_id) {
-                                awayTeam = { name: t.name, logo: t.logo || '' };
-                            }
+            // Find matches where one team is Top 3 and opponent is in upper half
+            let bestMatch: any = null;
+            let bestScore = Infinity;
+
+            for (const match of upcomingOnly) {
+                const homePos = positionMap.get(match.home_team_id) || 999;
+                const awayPos = positionMap.get(match.away_team_id) || 999;
+
+                // Check if one team is in Top 3 and opponent in upper half
+                const homeIsTop3 = homePos <= 3;
+                const awayIsTop3 = awayPos <= 3;
+                const homeInUpperHalf = homePos <= upperHalfLimit;
+                const awayInUpperHalf = awayPos <= upperHalfLimit;
+
+                // Valid top match: (homeTop3 && awayUpperHalf) OR (awayTop3 && homeUpperHalf)
+                if ((homeIsTop3 && awayInUpperHalf) || (awayIsTop3 && homeInUpperHalf)) {
+                    // Score = sum of positions (lower is better = bigger match)
+                    const score = homePos + awayPos;
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestMatch = match;
+                    }
+                }
+            }
+
+            // Fallback: if no top match found, try to find any match with Top 3 team
+            if (!bestMatch) {
+                for (const match of upcomingOnly) {
+                    const homePos = positionMap.get(match.home_team_id) || 999;
+                    const awayPos = positionMap.get(match.away_team_id) || 999;
+
+                    if (homePos <= 3 || awayPos <= 3) {
+                        const score = homePos + awayPos;
+                        if (score < bestScore) {
+                            bestScore = score;
+                            bestMatch = match;
                         }
                     }
                 }
             }
 
-            topMatch = {
-                id: match.id,
-                homeTeam: {
-                    name: homeTeam.name,
-                    logo: homeTeam.logo,
-                },
-                awayTeam: {
-                    name: awayTeam.name,
-                    logo: awayTeam.logo,
-                },
-                date: matchDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' }),
-                time: matchDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
-            };
+            // Final fallback: just take first upcoming match
+            if (!bestMatch && upcomingOnly.length > 0) {
+                bestMatch = upcomingOnly[0];
+            }
+
+            if (bestMatch) {
+                const matchDate = new Date(bestMatch.match_time * 1000);
+
+                // Get team info
+                let homeTeam = teamMap.get(bestMatch.home_team_id) || { name: 'Home', logo: '' };
+                let awayTeam = teamMap.get(bestMatch.away_team_id) || { name: 'Away', logo: '' };
+
+                // Fetch team info if not in map
+                if (homeTeam.name === 'Home' || awayTeam.name === 'Away') {
+                    const matchTeamIds = [bestMatch.home_team_id, bestMatch.away_team_id].filter(id => id);
+                    if (matchTeamIds.length > 0) {
+                        const { data: matchTeamsData } = await supabase
+                            .from('teams')
+                            .select('id, name, logo')
+                            .in('id', matchTeamIds);
+
+                        if (matchTeamsData) {
+                            for (const t of matchTeamsData) {
+                                if (t.id === bestMatch.home_team_id) {
+                                    homeTeam = { name: t.name, logo: t.logo || '' };
+                                }
+                                if (t.id === bestMatch.away_team_id) {
+                                    awayTeam = { name: t.name, logo: t.logo || '' };
+                                }
+                            }
+                        }
+                    }
+                }
+
+                topMatch = {
+                    id: bestMatch.id,
+                    homeTeam: {
+                        name: homeTeam.name,
+                        logo: homeTeam.logo,
+                    },
+                    awayTeam: {
+                        name: awayTeam.name,
+                        logo: awayTeam.logo,
+                    },
+                    date: matchDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' }),
+                    time: matchDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
+                };
+            }
         }
 
         // Get championship data
