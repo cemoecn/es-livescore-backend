@@ -180,6 +180,7 @@ export async function GET(
 
         // Find top match from TheSports API response
         // Logic: One team in Top 3, opponent in middle-to-upper table half
+        // IMPORTANT: Only from current (next) matchday
         let topMatch = null;
         const upcomingMatches = upcomingMatchResult?.results || [];
 
@@ -196,11 +197,23 @@ export async function GET(
             // Filter upcoming matches only (status_id 1 = upcoming)
             const upcomingOnly = upcomingMatches.filter((m: any) => m.status_id === 1);
 
+            // Find the current/next matchday (lowest round number among upcoming matches)
+            const roundNumbers = upcomingOnly
+                .map((m: any) => m.round?.round_num)
+                .filter((r: any) => r != null)
+                .sort((a: number, b: number) => a - b);
+            const currentRound = roundNumbers.length > 0 ? roundNumbers[0] : null;
+
+            // Filter to only matches from the current round
+            const currentRoundMatches = currentRound
+                ? upcomingOnly.filter((m: any) => m.round?.round_num === currentRound)
+                : upcomingOnly;
+
             // Find matches where one team is Top 3 and opponent is in upper half
             let bestMatch: any = null;
             let bestScore = Infinity;
 
-            for (const match of upcomingOnly) {
+            for (const match of currentRoundMatches) {
                 const homePos = positionMap.get(match.home_team_id) || 999;
                 const awayPos = positionMap.get(match.away_team_id) || 999;
 
@@ -221,9 +234,9 @@ export async function GET(
                 }
             }
 
-            // Fallback: if no top match found, try to find any match with Top 3 team
+            // Fallback: if no top match found, try to find any match with Top 3 team (in current round)
             if (!bestMatch) {
-                for (const match of upcomingOnly) {
+                for (const match of currentRoundMatches) {
                     const homePos = positionMap.get(match.home_team_id) || 999;
                     const awayPos = positionMap.get(match.away_team_id) || 999;
 
@@ -237,9 +250,9 @@ export async function GET(
                 }
             }
 
-            // Final fallback: just take first upcoming match
-            if (!bestMatch && upcomingOnly.length > 0) {
-                bestMatch = upcomingOnly[0];
+            // Final fallback: just take first match from current round
+            if (!bestMatch && currentRoundMatches.length > 0) {
+                bestMatch = currentRoundMatches[0];
             }
 
             if (bestMatch) {
