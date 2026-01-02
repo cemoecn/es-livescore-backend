@@ -11,40 +11,56 @@ const API_KEY = process.env.THESPORTS_API_KEY || '';
 const USERNAME = process.env.THESPORTS_USERNAME || '';
 
 // Teams that need logos
-const TEAM_NAMES = [
-    'Leicester', // Try broader for Leicester
-    'AFC Ajax', // Try specific for Ajax
-    'Feyenoord', // Alternative for Eredivisie
-    'FC Porto', // Alternative for Primeira
+const TEAMS_NEEDING_LOGOS = [
+    { id: 'z318q66hdleqo9j', name: 'Eintracht Frankfurt' },
+    { id: 'gx7lm7phd7em2wd', name: 'VfB Stuttgart' },
+    { id: 'p3glrw7henvqdyj', name: 'TSG 1899 Hoffenheim' },
+    { id: '9vjxm8gh613r6od', name: 'Union Berlin' },
+    { id: 'vl7oqdehzvnr510', name: 'FC St. Pauli' },
+    { id: 'gy0or5jhkvwqwzv', name: '1. FC Heidenheim' },
+    { id: 'n54qllh261zqvy9', name: 'Holstein Kiel' },
 ];
 
 export async function GET() {
     try {
         const results: any[] = [];
 
-        for (const name of TEAM_NAMES) {
-            // Search Supabase by name
-            const { data: teams } = await supabase
-                .from('teams')
-                .select('id, name, logo')
-                .ilike('name', `%${name}%`)
-                .limit(1);
+        // Try Supabase first
+        const { data: supabaseTeams } = await supabase
+            .from('teams')
+            .select('id, name, logo')
+            .in('id', TEAMS_NEEDING_LOGOS.map(t => t.id));
 
-            if (teams && teams.length > 0) {
-                const team = teams[0];
-                results.push({
-                    id: team.id,
-                    name: team.name, // Use database name
-                    reqName: name,
-                    logo: team.logo,
-                    source: 'supabase',
-                });
+        for (const team of TEAMS_NEEDING_LOGOS) {
+            let logo = '';
+            let source = '';
+
+            // Check Supabase
+            const supaTeam = supabaseTeams?.find(t => t.id === team.id);
+            if (supaTeam?.logo) {
+                logo = supaTeam.logo;
+                source = 'supabase';
             } else {
-                results.push({
-                    name: name,
-                    found: false
-                });
+                // Try TheSports API
+                try {
+                    const url = `${API_URL}/v1/football/team/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${team.id}`;
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    if (data.results?.logo) {
+                        logo = data.results.logo;
+                        source = 'api';
+                    }
+                } catch (e) {
+                    // ignore
+                }
             }
+
+            results.push({
+                id: team.id,
+                name: team.name,
+                logo,
+                source,
+            });
         }
 
         // Generate code for easy copy-paste
