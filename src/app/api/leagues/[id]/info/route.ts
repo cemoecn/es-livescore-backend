@@ -311,6 +311,7 @@ export async function GET(
                     },
                     date: matchDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' }),
                     time: matchDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
+                    round: bestMatch.round?.round_num || currentRound || 1,
                 };
             }
         }
