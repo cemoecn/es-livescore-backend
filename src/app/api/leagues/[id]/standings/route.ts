@@ -73,9 +73,9 @@ const LEAGUE_ZONES: Record<string, {
         relegation_playoff: [16], relegation: [17, 18],
         promotion: [], promotion_playoff: [], eliminated: []
     },
-    // Eredivisie (18 teams): 1 CL, 2-3 CL Quali, 4 ECL Playoff, 16 Rel Playoff, 17-18 Abstieg
+    // Eredivisie (18 teams): 1 CL direkt, 2 CL Quali, 3 EL Quali, 4-5 ECL Playoffs, 16 Rel Playoff, 17-18 Abstieg
     'vl7oqdeheyr510j': {
-        cl: [1, 2, 3], el: [], ecl: [4],
+        cl: [1, 2], el: [3], ecl: [4, 5],
         relegation_playoff: [16], relegation: [17, 18],
         promotion: [], promotion_playoff: [], eliminated: []
     },
