@@ -74,22 +74,26 @@ export async function GET(
         // Fetch team info from Supabase
         const { data: teamsData } = await supabase
             .from('teams')
-            .select('id, name, logo')
+            .select('id, name, short_name, logo')
             .in('id', Array.from(teamIds));
 
         // Build team lookup map
-        const teamMap = new Map<string, { name: string; logo: string }>();
+        const teamMap = new Map<string, { name: string; shortName: string; logo: string }>();
         if (teamsData) {
             for (const team of teamsData) {
-                teamMap.set(team.id, { name: team.name, logo: team.logo || '' });
+                teamMap.set(team.id, {
+                    name: team.name,
+                    shortName: team.short_name || team.name,
+                    logo: team.logo || ''
+                });
             }
         }
 
         // Transform matches with team info
         // API Status IDs: 1 = upcoming, 8 = finished
         const transformedMatches = matches.map((match: any) => {
-            const homeTeam = teamMap.get(match.home_team_id) || { name: 'Home', logo: '' };
-            const awayTeam = teamMap.get(match.away_team_id) || { name: 'Away', logo: '' };
+            const homeTeam = teamMap.get(match.home_team_id) || { name: 'Home', shortName: 'HOM', logo: '' };
+            const awayTeam = teamMap.get(match.away_team_id) || { name: 'Away', shortName: 'AWA', logo: '' };
             const matchTime = match.match_time ? new Date(match.match_time * 1000) : null;
 
             // Extract scores from home_scores[0] and away_scores[0] arrays
@@ -101,12 +105,14 @@ export async function GET(
                 homeTeam: {
                     id: match.home_team_id,
                     name: homeTeam.name,
+                    shortName: homeTeam.shortName,
                     logo: homeTeam.logo,
                     score: homeScore,
                 },
                 awayTeam: {
                     id: match.away_team_id,
                     name: awayTeam.name,
+                    shortName: awayTeam.shortName,
                     logo: awayTeam.logo,
                     score: awayScore,
                 },

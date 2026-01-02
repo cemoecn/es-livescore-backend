@@ -92,7 +92,7 @@ export async function GET(
             top3TeamIds.length > 0
                 ? supabase
                     .from('teams')
-                    .select('id, name, logo')
+                    .select('id, name, short_name, logo')
                     .in('id', top3TeamIds)
                 : Promise.resolve({ data: [], error: null }),
 
@@ -116,10 +116,14 @@ export async function GET(
         ]);
 
         // Build team lookup map
-        const teamMap = new Map<string, { name: string; logo: string }>();
+        const teamMap = new Map<string, { name: string; shortName: string; logo: string }>();
         if (teamsResult.data) {
             for (const team of teamsResult.data) {
-                teamMap.set(team.id, { name: team.name, logo: team.logo || '' });
+                teamMap.set(team.id, {
+                    name: team.name,
+                    shortName: team.short_name || team.name,
+                    logo: team.logo || ''
+                });
             }
         }
 
@@ -264,9 +268,9 @@ export async function GET(
             if (bestMatch) {
                 const matchDate = new Date(bestMatch.match_time * 1000);
 
-                // Get team info
-                let homeTeam = teamMap.get(bestMatch.home_team_id) || { name: 'Home', logo: '' };
-                let awayTeam = teamMap.get(bestMatch.away_team_id) || { name: 'Away', logo: '' };
+                // Get team info (with shortName)
+                let homeTeam = teamMap.get(bestMatch.home_team_id) || { name: 'Home', shortName: 'HOM', logo: '' };
+                let awayTeam = teamMap.get(bestMatch.away_team_id) || { name: 'Away', shortName: 'AWA', logo: '' };
 
                 // Fetch team info if not in map
                 if (homeTeam.name === 'Home' || awayTeam.name === 'Away') {
@@ -274,16 +278,16 @@ export async function GET(
                     if (matchTeamIds.length > 0) {
                         const { data: matchTeamsData } = await supabase
                             .from('teams')
-                            .select('id, name, logo')
+                            .select('id, name, short_name, logo')
                             .in('id', matchTeamIds);
 
                         if (matchTeamsData) {
                             for (const t of matchTeamsData) {
                                 if (t.id === bestMatch.home_team_id) {
-                                    homeTeam = { name: t.name, logo: t.logo || '' };
+                                    homeTeam = { name: t.name, shortName: t.short_name || t.name, logo: t.logo || '' };
                                 }
                                 if (t.id === bestMatch.away_team_id) {
-                                    awayTeam = { name: t.name, logo: t.logo || '' };
+                                    awayTeam = { name: t.name, shortName: t.short_name || t.name, logo: t.logo || '' };
                                 }
                             }
                         }
@@ -294,10 +298,12 @@ export async function GET(
                     id: bestMatch.id,
                     homeTeam: {
                         name: homeTeam.name,
+                        shortName: homeTeam.shortName,
                         logo: homeTeam.logo,
                     },
                     awayTeam: {
                         name: awayTeam.name,
+                        shortName: awayTeam.shortName,
                         logo: awayTeam.logo,
                     },
                     date: matchDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' }),
