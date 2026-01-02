@@ -125,9 +125,13 @@ export async function GET(
             return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
         });
 
-        // Find current/latest round (highest round number)
-        const allRounds = transformedMatches.map((m: any) => m.round).filter((r: any) => r != null);
-        const currentRound = allRounds.length > 0 ? Math.max(...allRounds) : 1;
+        // Find current round (first round with upcoming matches, status=1)
+        const upcomingRounds = transformedMatches
+            .filter((m: any) => m.status === 1 && m.round != null)
+            .map((m: any) => m.round)
+            .sort((a: number, b: number) => a - b);
+        const currentRound = upcomingRounds.length > 0 ? upcomingRounds[0] :
+            (Math.max(...transformedMatches.map((m: any) => m.round || 0)) || 1);
 
         return NextResponse.json({
             success: true,
