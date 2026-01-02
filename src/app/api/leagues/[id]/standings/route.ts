@@ -2,6 +2,7 @@
  * GET /api/leagues/[id]/standings
  * Returns full standings for a league using TheSports season/recent/table/detail API
  * Team names and logos are fetched from Supabase teams cache (synced from TheSports)
+ * Zone/Promotion data is now fetched dynamically from the API
  */
 
 import { supabase } from '@/lib/supabase';
@@ -25,100 +26,44 @@ const CURRENT_SEASON_IDS: Record<string, string> = {
     '56ypq3nh0xmd7oj': 'v2y8m4zhl38ql07', // Europa League 2025/26
 };
 
-// Zone configuration per league (positions for CL, EL, ECL, relegation playoff, relegation, promotion)
-// Based on 2025/26 season rules
-const LEAGUE_ZONES: Record<string, {
-    cl: number[];
-    el: number[];
-    ecl: number[];
-    relegation_playoff: number[];
-    relegation: number[];
-    promotion: number[];
-    promotion_playoff: number[];
-    eliminated: number[]; // For UEFA competitions
-}> = {
-    // Bundesliga (18 teams): 1-4 CL, 5 EL, 6 ECL Playoff, 16 Rel Playoff, 17-18 Abstieg
-    'gy0or5jhg6qwzv3': {
-        cl: [1, 2, 3, 4], el: [5], ecl: [6],
-        relegation_playoff: [16], relegation: [17, 18],
-        promotion: [], promotion_playoff: [], eliminated: []
-    },
-    // Premier League (20 teams): 1-4 CL, 5 EL, 6 ECL, 18-20 Abstieg
-    'jednm9whz0ryox8': {
-        cl: [1, 2, 3, 4], el: [5], ecl: [6],
-        relegation_playoff: [], relegation: [18, 19, 20],
-        promotion: [], promotion_playoff: [], eliminated: []
-    },
-    // Championship (24 teams): 1-2 Aufstieg, 3-6 Playoffs, 22-24 Abstieg
-    'l965mkyh32r1ge4': {
-        cl: [], el: [], ecl: [],
-        relegation_playoff: [], relegation: [22, 23, 24],
-        promotion: [1, 2], promotion_playoff: [3, 4, 5, 6], eliminated: []
-    },
-    // La Liga (20 teams): 1-4 CL, 5-6 EL, 7 ECL Playoff, 18-20 Abstieg
-    'vl7oqdehlyr510j': {
-        cl: [1, 2, 3, 4], el: [5, 6], ecl: [7],
-        relegation_playoff: [], relegation: [18, 19, 20],
-        promotion: [], promotion_playoff: [], eliminated: []
-    },
-    // Serie A (20 teams): 1-4 CL, 5 EL, 6 ECL, 18-20 Abstieg
-    '4zp5rzghp5q82w1': {
-        cl: [1, 2, 3, 4], el: [5], ecl: [6],
-        relegation_playoff: [], relegation: [18, 19, 20],
-        promotion: [], promotion_playoff: [], eliminated: []
-    },
-    // Ligue 1 (18 teams): 1-3 CL, 4 EL, 5 ECL Playoff, 16 Rel Playoff, 17-18 Abstieg
-    'yl5ergphnzr8k0o': {
-        cl: [1, 2, 3], el: [4], ecl: [5],
-        relegation_playoff: [16], relegation: [17, 18],
-        promotion: [], promotion_playoff: [], eliminated: []
-    },
-    // Eredivisie (18 teams): 1 CL direkt, 2 CL Quali, 3 EL Quali, 4-5 ECL Playoffs, 16 Rel Playoff, 17-18 Abstieg
-    'vl7oqdeheyr510j': {
-        cl: [1, 2], el: [3], ecl: [4, 5],
-        relegation_playoff: [16], relegation: [17, 18],
-        promotion: [], promotion_playoff: [], eliminated: []
-    },
-    // Primeira Liga (18 teams): 1-2 CL, 3 CL Quali, 4 ECL Playoff, 16 Rel Playoff, 17-18 Abstieg
-    '9vjxm8ghx2r6odg': {
-        cl: [1, 2, 3], el: [4], ecl: [5],
-        relegation_playoff: [16], relegation: [17, 18],
-        promotion: [], promotion_playoff: [], eliminated: []
-    },
-    // Champions League (36 teams): 1-8 Achtelfinale, 9-24 Playoffs, 25-36 Ausgeschieden
-    'z8yomo4h7wq0j6l': {
-        cl: [1, 2, 3, 4, 5, 6, 7, 8], // Direct to Round of 16
-        el: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24], // Playoffs
-        ecl: [],
-        relegation_playoff: [], relegation: [],
-        promotion: [], promotion_playoff: [],
-        eliminated: [25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36]
-    },
-    // Europa League (36 teams): 1-8 Achtelfinale, 9-24 Playoffs, 25-36 Ausgeschieden
-    '56ypq3nh0xmd7oj': {
-        cl: [1, 2, 3, 4, 5, 6, 7, 8], // Direct to Round of 16
-        el: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24], // Playoffs
-        ecl: [],
-        relegation_playoff: [], relegation: [],
-        promotion: [], promotion_playoff: [],
-        eliminated: [25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36]
-    },
+// German translations for promotion names from API
+const PROMOTION_LABELS: Record<string, string> = {
+    'Champions League league stage': 'UEFA Champions League',
+    'Champions League': 'UEFA Champions League',
+    'CL Group': 'UEFA Champions League',
+    'Europa League league stage': 'UEFA Europa League',
+    'Europa League': 'UEFA Europa League',
+    'EL Group': 'UEFA Europa League',
+    'UEFA ECL Qualification': 'UEFA Conference League',
+    'Conference League': 'UEFA Conference League',
+    'ECL Qualification': 'UEFA Conference League',
+    'Relegation Playoffs': 'Relegation',
+    'Relegation playoffs': 'Relegation',
+    'Degrade Team': 'Abstieg',
+    'Relegation': 'Abstieg',
+    'Promoted': 'Direkter Aufstieg',
+    'Promotion Playoffs': 'Aufstiegs-Playoffs',
+    'Promotion playoffs': 'Aufstiegs-Playoffs',
+    'Round of 16': 'Achtelfinale',
+    'Knockout stage playoffs': 'Playoffs',
+    'Eliminated': 'Ausgeschieden',
 };
 
-type ZoneType = 'cl' | 'el' | 'ecl' | 'relegation_playoff' | 'relegation' | 'promotion' | 'promotion_playoff' | 'eliminated' | null;
+// Categorize promotion types for consistent zone naming
+function categorizePromotion(promotionName: string): string | null {
+    const lowerName = promotionName.toLowerCase();
 
-function getZone(position: number, leagueId: string): ZoneType {
-    const zones = LEAGUE_ZONES[leagueId];
-    if (!zones) return null;
+    if (lowerName.includes('champions league')) return 'cl';
+    if (lowerName.includes('europa league') && !lowerName.includes('conference')) return 'el';
+    if (lowerName.includes('conference') || lowerName.includes('ecl')) return 'ecl';
+    if (lowerName.includes('relegation playoff')) return 'relegation_playoff';
+    if (lowerName.includes('degrade') || lowerName === 'relegation') return 'relegation';
+    if (lowerName.includes('promoted') || lowerName === 'promotion') return 'promotion';
+    if (lowerName.includes('promotion playoff')) return 'promotion_playoff';
+    if (lowerName.includes('round of 16') || lowerName.includes('knockout')) return 'cl'; // Direct qualification
+    if (lowerName.includes('playoff') && !lowerName.includes('relegation') && !lowerName.includes('promotion')) return 'el'; // Playoff for knockout
+    if (lowerName.includes('eliminated')) return 'eliminated';
 
-    if (zones.cl.includes(position)) return 'cl';
-    if (zones.el.includes(position)) return 'el';
-    if (zones.ecl.includes(position)) return 'ecl';
-    if (zones.relegation_playoff.includes(position)) return 'relegation_playoff';
-    if (zones.relegation.includes(position)) return 'relegation';
-    if (zones.promotion.includes(position)) return 'promotion';
-    if (zones.promotion_playoff.includes(position)) return 'promotion_playoff';
-    if (zones.eliminated.includes(position)) return 'eliminated';
     return null;
 }
 
@@ -137,19 +82,29 @@ export async function GET(
             );
         }
 
-        // Fetch standings from TheSports API
+        // Fetch standings from TheSports API (includes promotions data)
         const standingsResponse = await fetch(
             `${API_URL}/v1/football/season/recent/table/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${seasonId}`
         );
         const standingsData = await standingsResponse.json();
 
+        // Extract promotions data from API response
+        const promotions = standingsData?.results?.promotions || [];
         const tables = standingsData?.results?.tables || [];
         const rows = tables[0]?.rows || [];
+
+        // Build promotion lookup map (promotion_id -> { name, color, zone })
+        const promotionMap = new Map<string, { name: string; color: string; zone: string | null; label: string }>();
+        for (const p of promotions) {
+            const zone = categorizePromotion(p.name);
+            const label = PROMOTION_LABELS[p.name] || p.name;
+            promotionMap.set(p.id, { name: p.name, color: p.color, zone, label });
+        }
 
         if (rows.length === 0) {
             return NextResponse.json({
                 success: true,
-                data: { standings: [], seasonId, teamsCount: 0 },
+                data: { standings: [], seasonId, teamsCount: 0, promotions: [] },
             });
         }
 
@@ -166,8 +121,7 @@ export async function GET(
             console.error('Supabase teams fetch error:', teamsError);
         }
 
-        // Build team lookup map directly from Supabase data
-        // No manual corrections - Supabase has authoritative team names from the sync
+        // Build team lookup map
         const teamMap = new Map<string, { name: string; logo: string }>();
         if (teamsData) {
             for (const team of teamsData) {
@@ -175,10 +129,14 @@ export async function GET(
             }
         }
 
-        // Build standings with team info
+        // Build standings with team info and dynamic zone from API
         const standings = rows.map((row: any, idx: number) => {
             const teamInfo = teamMap.get(row.team_id) || { name: `Team ${idx + 1}`, logo: '' };
             const position = row.position || idx + 1;
+
+            // Get zone from promotion_id (dynamic from API)
+            const promotionInfo = promotionMap.get(row.promotion_id);
+            const zone = promotionInfo?.zone || null;
 
             return {
                 position,
@@ -191,12 +149,16 @@ export async function GET(
                 goals: `${row.goals || 0}:${row.goals_against || 0}`,
                 goalDiff: row.goal_diff || 0,
                 points: row.points || 0,
-                zone: getZone(position, leagueId),
+                zone,
+                promotionLabel: promotionInfo?.label || null,
+                promotionColor: promotionInfo?.color || null,
             };
         });
 
-        // Debug: check which teams are missing
-        const missingTeams = standings.filter((s: any) => s.team.startsWith('Team '));
+        // Build promotions list for frontend legend
+        const uniquePromotions = Array.from(promotionMap.values())
+            .filter(p => p.zone)
+            .map(p => ({ zone: p.zone, label: p.label, color: p.color }));
 
         return NextResponse.json({
             success: true,
@@ -204,14 +166,7 @@ export async function GET(
                 standings,
                 seasonId,
                 teamsCount: standings.length,
-            },
-            debug: {
-                teamsInDb: teamsData?.length || 0,
-                missingCount: missingTeams.length,
-                allTeamIds: rows.map((row: any) => ({
-                    position: row.position,
-                    team_id: row.team_id,
-                })),
+                promotions: uniquePromotions,
             },
             timestamp: new Date().toISOString(),
         });
