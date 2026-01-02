@@ -109,7 +109,7 @@ export async function GET(
                 date: matchTime?.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' }) || null,
                 time: matchTime?.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) || null,
                 status: match.status_id || 0,
-                round: match.round || null,
+                round: match.round?.round_num ?? null,
             };
         });
 
@@ -120,11 +120,16 @@ export async function GET(
             return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
         });
 
+        // Find current/latest round (highest round number)
+        const allRounds = transformedMatches.map((m: any) => m.round).filter((r: any) => r != null);
+        const currentRound = allRounds.length > 0 ? Math.max(...allRounds) : 1;
+
         return NextResponse.json({
             success: true,
             data: {
                 matches: transformedMatches,
                 round: round || 'all',
+                currentRound,
                 totalMatches: transformedMatches.length,
             },
             timestamp: new Date().toISOString(),
