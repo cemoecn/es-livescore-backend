@@ -57,52 +57,7 @@ const SEASON_INFO: Record<string, { totalMatchdays: number; season: string; team
     '56ypq3nh0xmd7oj': { totalMatchdays: 8, season: '2025/26', teamCount: 36 }, // Europa League
 };
 
-// Static championship data (last champion is from 2024/25 season)
-const CHAMPIONSHIP_DATA: Record<string, {
-    lastChampion: { name: string; logo: string; season: string };
-    mostTitles: { name: string; logo: string; count: number };
-}> = {
-    'gy0or5jhg6qwzv3': { // Bundesliga
-        lastChampion: { name: 'Bayern München', logo: 'https://img.thesports.com/football/team/8e31e674cdfd6deb6698a6f30e605ff7.png', season: '2024/25' },
-        mostTitles: { name: 'Bayern München', logo: 'https://img.thesports.com/football/team/8e31e674cdfd6deb6698a6f30e605ff7.png', count: 34 },
-    },
-    'jednm9whz0ryox8': { // Premier League
-        lastChampion: { name: 'Liverpool', logo: 'https://img.thesports.com/football/team/368a5f68c6efda7c4e1db3e4f7a89d7c.png', season: '2024/25' },
-        mostTitles: { name: 'Manchester United', logo: 'https://img.thesports.com/football/team/05a7ae4ce09e34eb0ff3179efe4cf040.png', count: 20 },
-    },
-    'l965mkyh32r1ge4': { // Championship
-        lastChampion: { name: 'Leeds United', logo: 'https://img.thesports.com/football/team/c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3.png', season: '2024/25' },
-        mostTitles: { name: 'Leicester City', logo: 'https://img.thesports.com/football/team/d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4.png', count: 7 },
-    },
-    'vl7oqdehlyr510j': { // La Liga
-        lastChampion: { name: 'Barcelona', logo: 'https://img.thesports.com/football/team/68d0f2e0d3a1b7f08b24d6f4b8a95c31.png', season: '2024/25' },
-        mostTitles: { name: 'Real Madrid', logo: 'https://img.thesports.com/football/team/0c68e645b9eab2fd7a1d127a11b41c5e.png', count: 36 },
-    },
-    '4zp5rzghp5q82w1': { // Serie A
-        lastChampion: { name: 'Napoli', logo: 'https://img.thesports.com/football/team/f7d4c8b5a3e2d1f0c9b8a7e6d5c4b3a2.png', season: '2024/25' },
-        mostTitles: { name: 'Juventus', logo: 'https://img.thesports.com/football/team/ee4b60af8f1d30df7def1df0693a5fe9.png', count: 36 },
-    },
-    'yl5ergphnzr8k0o': { // Ligue 1
-        lastChampion: { name: 'PSG', logo: 'https://img.thesports.com/football/team/90a7c8dbb8a3c13bb4e56ac5cfa2bfa5.png', season: '2024/25' },
-        mostTitles: { name: 'PSG', logo: 'https://img.thesports.com/football/team/90a7c8dbb8a3c13bb4e56ac5cfa2bfa5.png', count: 13 },
-    },
-    'vl7oqdeheyr510j': { // Eredivisie
-        lastChampion: { name: 'PSV Eindhoven', logo: 'https://img.thesports.com/football/team/e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5.png', season: '2024/25' },
-        mostTitles: { name: 'Ajax', logo: 'https://img.thesports.com/football/team/f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6.png', count: 36 },
-    },
-    '9vjxm8ghx2r6odg': { // Primeira Liga
-        lastChampion: { name: 'Sporting CP', logo: 'https://img.thesports.com/football/team/a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7.png', season: '2024/25' },
-        mostTitles: { name: 'Benfica', logo: 'https://img.thesports.com/football/team/b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8.png', count: 38 },
-    },
-    'z8yomo4h7wq0j6l': { // Champions League
-        lastChampion: { name: 'Paris Saint-Germain', logo: 'https://img.thesports.com/football/team/90a7c8dbb8a3c13bb4e56ac5cfa2bfa5.png', season: '2024/25' },
-        mostTitles: { name: 'Real Madrid', logo: 'https://img.thesports.com/football/team/0c68e645b9eab2fd7a1d127a11b41c5e.png', count: 15 },
-    },
-    '56ypq3nh0xmd7oj': { // Europa League
-        lastChampion: { name: 'Tottenham Hotspur', logo: 'https://img.thesports.com/football/team/4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f.png', season: '2024/25' },
-        mostTitles: { name: 'Sevilla', logo: 'https://img.thesports.com/football/team/d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0.png', count: 7 },
-    },
-};
+
 
 export async function GET(
     _request: NextRequest,
@@ -405,10 +360,7 @@ export async function GET(
             }
         }
 
-        // Fallback to static data if API doesn't return championship info
-        if (!championships) {
-            championships = CHAMPIONSHIP_DATA[leagueId] || null;
-        }
+
 
         return NextResponse.json({
             success: true,
