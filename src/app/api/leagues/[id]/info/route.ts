@@ -197,12 +197,35 @@ export async function GET(
             // Filter upcoming matches only (status_id 1 = upcoming)
             const upcomingOnly = upcomingMatches.filter((m: any) => m.status_id === 1);
 
-            // Find the current/next matchday (lowest round number among upcoming matches)
-            const roundNumbers = upcomingOnly
+            // Find finished matches (status_id 8 = finished)
+            const finishedMatches = upcomingMatches.filter((m: any) => m.status_id === 8);
+
+            // Find the highest round that has finished matches
+            const finishedRounds = finishedMatches
                 .map((m: any) => m.round?.round_num)
-                .filter((r: any) => r != null)
-                .sort((a: number, b: number) => a - b);
-            const currentRound = roundNumbers.length > 0 ? roundNumbers[0] : null;
+                .filter((r: any) => r != null);
+            const highestFinishedRound = finishedRounds.length > 0
+                ? Math.max(...finishedRounds)
+                : 0;
+
+            // Find upcoming rounds that are after the highest finished round
+            const upcomingRounds = upcomingOnly
+                .map((m: any) => m.round?.round_num)
+                .filter((r: any) => r != null && r > highestFinishedRound);
+
+            // Current round = lowest upcoming round that's after finished rounds
+            // If no such round exists, fall back to lowest upcoming round
+            let currentRound: number | null = null;
+            if (upcomingRounds.length > 0) {
+                currentRound = Math.min(...upcomingRounds);
+            } else {
+                const allUpcomingRounds = upcomingOnly
+                    .map((m: any) => m.round?.round_num)
+                    .filter((r: any) => r != null);
+                if (allUpcomingRounds.length > 0) {
+                    currentRound = Math.min(...allUpcomingRounds);
+                }
+            }
 
             // Filter to only matches from the current round
             const currentRoundMatches = currentRound
