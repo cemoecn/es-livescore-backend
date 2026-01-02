@@ -132,7 +132,7 @@ export async function GET(
         const top3TeamIds = rows.slice(0, 3).map((row: any) => row.team_id as string);
 
         // 3. Fetch data in parallel - teams by specific IDs, upcoming matches from API
-        const [teamsResult, upcomingMatchResult] = await Promise.all([
+        const [teamsResult, upcomingMatchResult, competitionAdditional] = await Promise.all([
             // Get only the teams we need from Supabase
             top3TeamIds.length > 0
                 ? supabase
@@ -150,6 +150,14 @@ export async function GET(
                         return null;
                     })
                 : Promise.resolve(null),
+
+            // Get competition additional data (title_holder, most_titles) from TheSports API
+            fetch(`${API_URL}/v1/football/competition/additional/list?user=${USERNAME}&secret=${API_KEY}&uuid=${leagueId}`)
+                .then(r => r.json())
+                .catch(err => {
+                    console.error('Competition additional fetch error:', err);
+                    return null;
+                }),
         ]);
 
         // Build team lookup map
@@ -343,8 +351,55 @@ export async function GET(
             }
         }
 
-        // Get championship data
-        const championships = CHAMPIONSHIP_DATA[leagueId] || null;
+        // Get championship data from API or fallback to static data
+        let championships = null;
+        const additionalData = competitionAdditional?.results?.[0];
+        if (additionalData) {
+            // Parse title_holder (current champion)
+            const titleHolder = additionalData.title_holder;
+            // Parse most_titles (record champion)
+            const mostTitles = additionalData.most_titles;
+
+            if (titleHolder || mostTitles) {
+                // Need to look up team names from Supabase for these team IDs
+                const championTeamIds = [titleHolder?.team_id, mostTitles?.team_id].filter(id => id);
+                let championTeamMap = new Map<string, { name: string; logo: string }>();
+
+                if (championTeamIds.length > 0) {
+                    const { data: championTeams } = await supabase
+                        .from('teams')
+                        .select('id, name, logo')
+                        .in('id', championTeamIds);
+
+                    if (championTeams) {
+                        for (const t of championTeams) {
+                            championTeamMap.set(t.id, { name: t.name, logo: t.logo || '' });
+                        }
+                    }
+                }
+
+                const lastChampionTeam = titleHolder?.team_id ? championTeamMap.get(titleHolder.team_id) : null;
+                const mostTitlesTeam = mostTitles?.team_id ? championTeamMap.get(mostTitles.team_id) : null;
+
+                championships = {
+                    lastChampion: lastChampionTeam ? {
+                        name: lastChampionTeam.name,
+                        logo: lastChampionTeam.logo,
+                        season: titleHolder?.season || '2024/25',
+                    } : null,
+                    mostTitles: mostTitlesTeam ? {
+                        name: mostTitlesTeam.name,
+                        logo: mostTitlesTeam.logo,
+                        count: mostTitles?.count || 0,
+                    } : null,
+                };
+            }
+        }
+
+        // Fallback to static data if API doesn't return championship info
+        if (!championships) {
+            championships = CHAMPIONSHIP_DATA[leagueId] || null;
+        }
 
         return NextResponse.json({
             success: true,
