@@ -44,8 +44,8 @@ export async function GET(
         const { searchParams } = new URL(request.url);
         const round = searchParams.get('round');
 
-        // Fetch matches from TheSports API
-        let apiUrl = `${API_URL}/v1/football/match/season/list?user=${USERNAME}&secret=${API_KEY}&uuid=${seasonId}`;
+        // Fetch matches from TheSports API using season/recent
+        let apiUrl = `${API_URL}/v1/football/match/season/recent?user=${USERNAME}&secret=${API_KEY}&uuid=${seasonId}`;
 
         // Add round filter if specified
         if (round) {
