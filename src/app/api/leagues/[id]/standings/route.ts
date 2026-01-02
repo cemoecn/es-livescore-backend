@@ -84,6 +84,24 @@ const LEAGUE_ZONES: Record<string, {
         relegation_playoff: [16], relegation: [17, 18],
         promotion: [], promotion_playoff: []
     },
+    // Champions League (36 teams): 1-8 Achtelfinale, 9-24 Playoffs, 25-36 Ausgeschieden
+    'z8yomo4h7wq0j6l': {
+        cl: [1, 2, 3, 4, 5, 6, 7, 8], // Direct to Round of 16
+        el: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24], // Playoffs
+        ecl: [],
+        relegation_playoff: [],
+        relegation: [25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36], // Eliminated
+        promotion: [], promotion_playoff: []
+    },
+    // Europa League (36 teams): 1-8 Achtelfinale, 9-24 Playoffs, 25-36 Ausgeschieden
+    '56ypq3nh0xmd7oj': {
+        cl: [1, 2, 3, 4, 5, 6, 7, 8], // Direct to Round of 16
+        el: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24], // Playoffs
+        ecl: [],
+        relegation_playoff: [],
+        relegation: [25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36], // Eliminated
+        promotion: [], promotion_playoff: []
+    },
 };
 
 type ZoneType = 'cl' | 'el' | 'ecl' | 'relegation_playoff' | 'relegation' | 'promotion' | 'promotion_playoff' | null;
