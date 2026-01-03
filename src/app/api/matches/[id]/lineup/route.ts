@@ -98,19 +98,70 @@ export async function GET(
         const awayStarters = awayLineup.filter((p: TransformedPlayer) => p.isStarter);
         const awaySubs = awayLineup.filter((p: TransformedPlayer) => !p.isStarter);
 
+        // Extract coach data - API may provide coach object with id, name, logo
+        const homeCoach = results.coach?.home || null;
+        const awayCoach = results.coach?.away || null;
+
+        // Get coach IDs
+        const homeCoachId = results.coach_id?.home || homeCoach?.id || null;
+        const awayCoachId = results.coach_id?.away || awayCoach?.id || null;
+
+        // Fetch coach details if we have IDs
+        let homeCoachName = homeCoach?.name || null;
+        let homeCoachLogo = homeCoach?.logo || null;
+        let awayCoachName = awayCoach?.name || null;
+        let awayCoachLogo = awayCoach?.logo || null;
+
+        // Fetch coach from /coach/list API if we only have ID
+        if (homeCoachId && !homeCoachName) {
+            try {
+                const coachRes = await fetch(
+                    `${API_URL}/v1/football/coach/list?user=${USERNAME}&secret=${API_KEY}&uuid=${homeCoachId}`
+                );
+                const coachData = await coachRes.json();
+                const coach = coachData.results?.[0] || coachData.results;
+                if (coach) {
+                    homeCoachName = coach.name || coach.name_en || null;
+                    homeCoachLogo = coach.logo || null;
+                }
+            } catch (e) {
+                console.error('Failed to fetch home coach:', e);
+            }
+        }
+
+        if (awayCoachId && !awayCoachName) {
+            try {
+                const coachRes = await fetch(
+                    `${API_URL}/v1/football/coach/list?user=${USERNAME}&secret=${API_KEY}&uuid=${awayCoachId}`
+                );
+                const coachData = await coachRes.json();
+                const coach = coachData.results?.[0] || coachData.results;
+                if (coach) {
+                    awayCoachName = coach.name || coach.name_en || null;
+                    awayCoachLogo = coach.logo || null;
+                }
+            } catch (e) {
+                console.error('Failed to fetch away coach:', e);
+            }
+        }
+
         return NextResponse.json({
             success: true,
             data: {
                 confirmed: results.confirmed === 1,
                 home: {
                     formation: results.home_formation || null,
-                    coachId: results.coach_id?.home || null,
+                    coachId: homeCoachId,
+                    coachName: homeCoachName,
+                    coachLogo: homeCoachLogo,
                     starters: homeStarters,
                     substitutes: homeSubs,
                 },
                 away: {
                     formation: results.away_formation || null,
-                    coachId: results.coach_id?.away || null,
+                    coachId: awayCoachId,
+                    coachName: awayCoachName,
+                    coachLogo: awayCoachLogo,
                     starters: awayStarters,
                     substitutes: awaySubs,
                 },
