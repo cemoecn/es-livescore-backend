@@ -49,41 +49,37 @@ export async function GET(
         const rawData = results.data || [];
 
         // Parse the trend data
-        // API returns arrays like [16, 0, -2], [-16, 0, 1] per half
-        // Format: [value, eventType, minuteChange]
-        // value: positive = home team momentum, negative = away team
+        // API returns simple arrays of momentum values per minute
+        // Each value: positive = home team momentum, negative = away team
+        // First array = first half, Second array = second half
 
         const firstHalf: TrendData[] = [];
         const secondHalf: TrendData[] = [];
 
         if (rawData.length >= 1 && Array.isArray(rawData[0])) {
-            // First half data
-            let minute = 0;
-            for (const entry of rawData[0]) {
-                if (Array.isArray(entry) && entry.length >= 3) {
-                    minute += Math.abs(entry[2]); // Add minute change
+            // First half data - each entry is just a momentum value
+            rawData[0].forEach((value: number, index: number) => {
+                if (typeof value === 'number') {
                     firstHalf.push({
-                        minute,
-                        value: entry[0],
-                        eventType: entry[1],
+                        minute: index + 1,
+                        value: value,
+                        eventType: 0,
                     });
                 }
-            }
+            });
         }
 
         if (rawData.length >= 2 && Array.isArray(rawData[1])) {
-            // Second half data
-            let minute = 45; // Start from 45
-            for (const entry of rawData[1]) {
-                if (Array.isArray(entry) && entry.length >= 3) {
-                    minute += Math.abs(entry[2]); // Add minute change
+            // Second half data - starts at minute 46
+            rawData[1].forEach((value: number, index: number) => {
+                if (typeof value === 'number') {
                     secondHalf.push({
-                        minute,
-                        value: entry[0],
-                        eventType: entry[1],
+                        minute: 46 + index,
+                        value: value,
+                        eventType: 0,
                     });
                 }
-            }
+            });
         }
 
         return NextResponse.json({
