@@ -112,14 +112,38 @@ export async function GET(
         let weatherInfo = null;
         if (environment) {
             const weatherCode = environment.weather;
+
+            // Helper to format values - handle both raw numbers and already-formatted strings
+            const formatTemp = (val: unknown): string | null => {
+                if (val == null) return null;
+                const str = String(val);
+                // If already has unit, return as-is
+                if (str.includes('°')) return str;
+                return `${str}°C`;
+            };
+
+            const formatHumidity = (val: unknown): string | null => {
+                if (val == null) return null;
+                const str = String(val);
+                if (str.includes('%')) return str;
+                return `${str}%`;
+            };
+
+            const formatWind = (val: unknown): string | null => {
+                if (val == null) return null;
+                const str = String(val);
+                if (str.includes('m/s') || str.includes('km/h')) return str;
+                return `${str} m/s`;
+            };
+
             weatherInfo = {
                 weather: WEATHER_LABELS[weatherCode] || null,
                 weatherIcon: WEATHER_ICONS[weatherCode] || '🌡️',
                 weatherCode: weatherCode,
-                temperature: environment.temperature ? `${environment.temperature}°C` : null,
-                humidity: environment.humidity ? `${environment.humidity}%` : null,
-                wind: environment.wind ? `${environment.wind} km/h` : null,
-                pressure: environment.pressure ? `${environment.pressure} hPa` : null,
+                temperature: formatTemp(environment.temperature),
+                humidity: formatHumidity(environment.humidity),
+                wind: formatWind(environment.wind),
+                pressure: environment.pressure != null ? `${environment.pressure} hPa` : null,
             };
         }
 
