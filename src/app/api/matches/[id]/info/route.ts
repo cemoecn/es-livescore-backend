@@ -1,10 +1,9 @@
 /**
  * GET /api/matches/[id]/info
  * Returns additional match information: venue, referee, environment (weather)
- * Uses TheSports /v1/football/match/detail API
+ * Uses TheSports APIs directly for all data
  */
 
-import { supabase } from '@/lib/supabase';
 import { NextRequest, NextResponse } from 'next/server';
 
 const API_URL = process.env.THESPORTS_API_URL || 'https://api.thesports.com';
@@ -45,6 +44,28 @@ const WEATHER_ICONS: Record<number, string> = {
     13: '🌫️',
 };
 
+// Helper to format values - handle both raw numbers and already-formatted strings
+const formatTemp = (val: unknown): string | null => {
+    if (val == null) return null;
+    const str = String(val);
+    if (str.includes('°')) return str;
+    return `${str}°C`;
+};
+
+const formatHumidity = (val: unknown): string | null => {
+    if (val == null) return null;
+    const str = String(val);
+    if (str.includes('%')) return str;
+    return `${str}%`;
+};
+
+const formatWind = (val: unknown): string | null => {
+    if (val == null) return null;
+    const str = String(val);
+    if (str.includes('m/s') || str.includes('km/h')) return str;
+    return `${str} m/s`;
+};
+
 export async function GET(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -72,39 +93,50 @@ export async function GET(
         const refereeId = matchData.referee_id || null;
         const environment = matchData.environment || null;
 
-        // Fetch venue name from Supabase if we have venue_id
-        let venueName: string | null = null;
-        let venueCity: string | null = null;
-        let venueCapacity: number | null = null;
+        // Fetch venue details from TheSports API if we have venue_id
+        let venueInfo: { id: string; name: string; city: string | null; capacity: number | null } | null = null;
 
         if (venueId) {
-            const { data: venueData } = await supabase
-                .from('venues')
-                .select('name, city, capacity')
-                .eq('id', venueId)
-                .single();
+            try {
+                const venueResponse = await fetch(
+                    `${API_URL}/v1/football/venue/list?user=${USERNAME}&secret=${API_KEY}&uuid=${venueId}`
+                );
+                const venueData = await venueResponse.json();
+                const venue = venueData.results?.[0] || venueData.results;
 
-            if (venueData) {
-                venueName = venueData.name;
-                venueCity = venueData.city;
-                venueCapacity = venueData.capacity;
+                if (venue && venue.name) {
+                    venueInfo = {
+                        id: venueId,
+                        name: venue.name,
+                        city: venue.city || null,
+                        capacity: venue.capacity ? parseInt(venue.capacity, 10) : null,
+                    };
+                }
+            } catch (e) {
+                console.error('Error fetching venue:', e);
             }
         }
 
-        // Fetch referee name from Supabase if we have referee_id
-        let refereeName: string | null = null;
-        let refereeCountry: string | null = null;
+        // Fetch referee details from TheSports API if we have referee_id
+        let refereeInfo: { id: string; name: string; country: string | null } | null = null;
 
         if (refereeId) {
-            const { data: refereeData } = await supabase
-                .from('referees')
-                .select('name, country')
-                .eq('id', refereeId)
-                .single();
+            try {
+                const refereeResponse = await fetch(
+                    `${API_URL}/v1/football/referee/list?user=${USERNAME}&secret=${API_KEY}&uuid=${refereeId}`
+                );
+                const refereeData = await refereeResponse.json();
+                const referee = refereeData.results?.[0] || refereeData.results;
 
-            if (refereeData) {
-                refereeName = refereeData.name;
-                refereeCountry = refereeData.country;
+                if (referee && referee.name) {
+                    refereeInfo = {
+                        id: refereeId,
+                        name: referee.name,
+                        country: referee.country_name || referee.country || null,
+                    };
+                }
+            } catch (e) {
+                console.error('Error fetching referee:', e);
             }
         }
 
@@ -112,30 +144,6 @@ export async function GET(
         let weatherInfo = null;
         if (environment) {
             const weatherCode = environment.weather;
-
-            // Helper to format values - handle both raw numbers and already-formatted strings
-            const formatTemp = (val: unknown): string | null => {
-                if (val == null) return null;
-                const str = String(val);
-                // If already has unit, return as-is
-                if (str.includes('°')) return str;
-                return `${str}°C`;
-            };
-
-            const formatHumidity = (val: unknown): string | null => {
-                if (val == null) return null;
-                const str = String(val);
-                if (str.includes('%')) return str;
-                return `${str}%`;
-            };
-
-            const formatWind = (val: unknown): string | null => {
-                if (val == null) return null;
-                const str = String(val);
-                if (str.includes('m/s') || str.includes('km/h')) return str;
-                return `${str} m/s`;
-            };
-
             weatherInfo = {
                 weather: WEATHER_LABELS[weatherCode] || null,
                 weatherIcon: WEATHER_ICONS[weatherCode] || '🌡️',
@@ -143,25 +151,21 @@ export async function GET(
                 temperature: formatTemp(environment.temperature),
                 humidity: formatHumidity(environment.humidity),
                 wind: formatWind(environment.wind),
-                pressure: environment.pressure != null ? `${environment.pressure} hPa` : null,
+                pressure: environment.pressure != null ? `${environment.pressure}` : null,
             };
         }
 
         return NextResponse.json({
             success: true,
             data: {
-                venue: venueName ? {
-                    id: venueId,
-                    name: venueName,
-                    city: venueCity,
-                    capacity: venueCapacity,
-                } : null,
-                referee: refereeName ? {
-                    id: refereeId,
-                    name: refereeName,
-                    country: refereeCountry,
-                } : null,
+                venue: venueInfo,
+                referee: refereeInfo,
                 environment: weatherInfo,
+            },
+            debug: {
+                venueId,
+                refereeId,
+                hasEnvironment: !!environment,
             },
             timestamp: new Date().toISOString(),
         });
