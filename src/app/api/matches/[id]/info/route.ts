@@ -52,9 +52,9 @@ export async function GET(
     try {
         const { id: matchId } = await params;
 
-        // Fetch match detail from TheSports API
+        // Fetch match detail from TheSports API using match/recent/list
         const response = await fetch(
-            `${API_URL}/v1/football/match/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${matchId}`
+            `${API_URL}/v1/football/match/recent/list?user=${USERNAME}&secret=${API_KEY}&uuid=${matchId}`
         );
         const apiData = await response.json();
 
