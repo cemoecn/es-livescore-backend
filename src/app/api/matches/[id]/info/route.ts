@@ -118,7 +118,13 @@ export async function GET(
         }
 
         // Fetch referee details from TheSports API if we have referee_id
-        let refereeInfo: { id: string; name: string; country: string | null } | null = null;
+        let refereeInfo: {
+            id: string;
+            name: string;
+            country: string | null;
+            birthday: string | null;
+            logo: string | null;
+        } | null = null;
 
         if (refereeId) {
             try {
@@ -128,11 +134,16 @@ export async function GET(
                 const refereeData = await refereeResponse.json();
                 const referee = refereeData.results?.[0] || refereeData.results;
 
+                // Log all available fields for debugging
+                console.log('[Referee API] Full response:', JSON.stringify(referee, null, 2));
+
                 if (referee && referee.name) {
                     refereeInfo = {
                         id: refereeId,
                         name: referee.name,
-                        country: referee.country_name || referee.country || null,
+                        country: referee.country_name || referee.nationality || referee.country || null,
+                        birthday: referee.birthday || referee.birth_date || null,
+                        logo: referee.logo || referee.photo || null,
                     };
                 }
             } catch (e) {
