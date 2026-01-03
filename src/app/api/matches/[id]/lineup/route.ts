@@ -1,6 +1,7 @@
 /**
  * GET /api/matches/[id]/lineup
- * Returns match lineup (starting players, substitutes)
+ * Returns match lineup (starting players, substitutes, formations)
+ * Uses TheSports /v1/football/match/lineup/detail API
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -9,6 +10,43 @@ const API_URL = process.env.THESPORTS_API_URL || 'https://api.thesports.com';
 const API_KEY = process.env.THESPORTS_API_KEY || '';
 const USERNAME = process.env.THESPORTS_USERNAME || '';
 
+// Map position codes to display format
+const POSITION_MAP: Record<string, string> = {
+    'G': 'TW',   // Goalkeeper -> Torwart
+    'D': 'ABW',  // Defender -> Abwehr
+    'M': 'MIT',  // Midfielder -> Mittelfeld
+    'F': 'STR',  // Forward -> Stürmer
+};
+
+interface ApiPlayer {
+    id: string;
+    name: string;
+    logo?: string;
+    shirt_number?: number;
+    position?: string;
+    first?: number;
+    captain?: number;
+    x?: number;
+    y?: number;
+    rating?: string;
+    incidents?: any[];
+}
+
+interface TransformedPlayer {
+    id: string;
+    name: string;
+    logo: string | null;
+    number: number;
+    position: string;
+    positionLabel: string;
+    isStarter: boolean;
+    isCaptain: boolean;
+    x: number | null;
+    y: number | null;
+    rating: string | null;
+    incidents: any[];
+}
+
 export async function GET(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -16,8 +54,8 @@ export async function GET(
     try {
         const { id } = await params;
 
-        // Fetch match lineup from TheSports API
-        const url = `${API_URL}/v1/football/match/lineup/list?user=${USERNAME}&secret=${API_KEY}&id=${id}`;
+        // Fetch match lineup from TheSports API using lineup/detail
+        const url = `${API_URL}/v1/football/match/lineup/detail?user=${USERNAME}&secret=${API_KEY}&uuid=${id}`;
         const response = await fetch(url, {
             headers: { 'Accept': 'application/json' },
         });
@@ -32,12 +70,52 @@ export async function GET(
             throw new Error(data.err);
         }
 
-        // Extract lineup from the response
-        const lineup = data.results || data.data?.results || data;
+        const results = data.results || {};
+
+        // Transform player data
+        const transformPlayer = (player: ApiPlayer): TransformedPlayer => ({
+            id: player.id,
+            name: player.name || 'Unbekannt',
+            logo: player.logo || null,
+            number: player.shirt_number || 0,
+            position: player.position || '',
+            positionLabel: POSITION_MAP[player.position || ''] || player.position || '',
+            isStarter: player.first === 1,
+            isCaptain: player.captain === 1,
+            x: player.x ?? null,
+            y: player.y ?? null,
+            rating: player.rating || null,
+            incidents: player.incidents || [],
+        });
+
+        // Get home and away lineups
+        const homeLineup = (results.lineup?.home || []).map(transformPlayer);
+        const awayLineup = (results.lineup?.away || []).map(transformPlayer);
+
+        // Separate starters and substitutes
+        const homeStarters = homeLineup.filter((p: TransformedPlayer) => p.isStarter);
+        const homeSubs = homeLineup.filter((p: TransformedPlayer) => !p.isStarter);
+        const awayStarters = awayLineup.filter((p: TransformedPlayer) => p.isStarter);
+        const awaySubs = awayLineup.filter((p: TransformedPlayer) => !p.isStarter);
 
         return NextResponse.json({
             success: true,
-            data: lineup,
+            data: {
+                confirmed: results.confirmed === 1,
+                home: {
+                    formation: results.home_formation || null,
+                    coachId: results.coach_id?.home || null,
+                    starters: homeStarters,
+                    substitutes: homeSubs,
+                },
+                away: {
+                    formation: results.away_formation || null,
+                    coachId: results.coach_id?.away || null,
+                    starters: awayStarters,
+                    substitutes: awaySubs,
+                },
+                injury: results.injury || null,
+            },
             matchId: id,
             timestamp: new Date().toISOString(),
         });
