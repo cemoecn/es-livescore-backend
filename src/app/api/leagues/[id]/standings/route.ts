@@ -2,7 +2,7 @@
  * GET /api/leagues/[id]/standings
  * Returns full standings for a league using TheSports season/recent/table/detail API
  * Team names and logos are fetched from Supabase teams cache (synced from TheSports)
- * Zone/Promotion data is now fetched dynamically from the API
+ * Zone/Promotion data is fetched dynamically from the API without grouping
  */
 
 import { supabase } from '@/lib/supabase';
@@ -26,45 +26,68 @@ const CURRENT_SEASON_IDS: Record<string, string> = {
     '56ypq3nh0xmd7oj': 'v2y8m4zhl38ql07', // Europa League 2025/26
 };
 
-// German translations for promotion names from API
+// German translations for promotion names from API - keeping specific names
 const PROMOTION_LABELS: Record<string, string> = {
-    'Champions League league stage': 'UEFA Champions League',
-    'Champions League': 'UEFA Champions League',
-    'CL Group': 'UEFA Champions League',
-    'Europa League league stage': 'UEFA Europa League',
-    'Europa League': 'UEFA Europa League',
-    'EL Group': 'UEFA Europa League',
-    'UEFA ECL Qualification': 'UEFA Conference League',
-    'Conference League': 'UEFA Conference League',
-    'ECL Qualification': 'UEFA Conference League',
+    // Champions League
+    'Champions League league stage': 'CL Ligaphase',
+    'Champions League': 'Champions League',
+    'CL Group': 'CL Gruppenphase',
+    'CL league stage': 'CL Ligaphase',
+    // Europa League
+    'Europa League league stage': 'EL Ligaphase',
+    'Europa League': 'Europa League',
+    'EL Group': 'EL Gruppenphase',
+    'EL league stage': 'EL Ligaphase',
+    // Conference League - keep specific names
+    'UEFA ECL Qualification': 'Conference League Quali',
+    'UEFA ECL Playoffs': 'Conference League Playoffs',
+    'UEFA ECL qualifying playoffs': 'Conference League Quali-Playoffs',
+    'Conference League': 'Conference League',
+    'ECL Qualification': 'Conference League Quali',
+    'ECL qualifying playoffs': 'ECL Quali-Playoffs',
+    'ECL Playoffs': 'ECL Playoffs',
+    // Relegation - keep specific
     'Relegation Playoffs': 'Relegation',
     'Relegation playoffs': 'Relegation',
+    'Relegation Playoff': 'Relegation',
+    // Abstieg
     'Degrade Team': 'Abstieg',
     'Relegation': 'Abstieg',
-    'Promoted': 'Direkter Aufstieg',
+    'Relegated': 'Abstieg',
+    // Aufstieg
+    'Promoted': 'Aufstieg',
+    'Promotion': 'Aufstieg',
+    'Direct Promotion': 'Direkter Aufstieg',
+    // Playoffs
     'Promotion Playoffs': 'Aufstiegs-Playoffs',
     'Promotion playoffs': 'Aufstiegs-Playoffs',
+    'Promotion Playoff': 'Aufstiegs-Playoff',
+    // UEFA Wettbewerbe Runden
     'Round of 16': 'Achtelfinale',
-    'Knockout stage playoffs': 'Playoffs',
+    'Knockout stage playoffs': 'K.o.-Playoffs',
     'Eliminated': 'Ausgeschieden',
 };
 
-// Categorize promotion types for consistent zone naming
-function categorizePromotion(promotionName: string): string | null {
+// Get zone color based on promotion type (for consistent styling)
+function getZoneColor(promotionName: string, apiColor: string): string {
     const lowerName = promotionName.toLowerCase();
 
-    if (lowerName.includes('champions league')) return 'cl';
-    if (lowerName.includes('europa league') && !lowerName.includes('conference')) return 'el';
-    if (lowerName.includes('conference') || lowerName.includes('ecl')) return 'ecl';
-    if (lowerName.includes('relegation playoff')) return 'relegation_playoff';
-    if (lowerName.includes('degrade') || lowerName === 'relegation') return 'relegation';
-    if (lowerName.includes('promoted') || lowerName === 'promotion') return 'promotion';
-    if (lowerName.includes('promotion playoff')) return 'promotion_playoff';
-    if (lowerName.includes('round of 16') || lowerName.includes('knockout')) return 'cl'; // Direct qualification
-    if (lowerName.includes('playoff') && !lowerName.includes('relegation') && !lowerName.includes('promotion')) return 'el'; // Playoff for knockout
-    if (lowerName.includes('eliminated')) return 'eliminated';
+    // Use API color if provided and not a generic gray
+    if (apiColor && apiColor !== '#B1A7A7' && apiColor !== '#000000') {
+        return apiColor;
+    }
 
-    return null;
+    // Fallback colors for common categories
+    if (lowerName.includes('champions league') || lowerName.includes('cl ')) return '#0066FF';
+    if (lowerName.includes('europa league') && !lowerName.includes('conference')) return '#FFB800';
+    if (lowerName.includes('conference') || lowerName.includes('ecl')) return '#00C853';
+    if (lowerName.includes('relegation playoff')) return '#FF9500';
+    if (lowerName.includes('degrade') || lowerName.includes('abstieg')) return '#FF3B30';
+    if (lowerName.includes('promoted') || lowerName.includes('promotion') || lowerName.includes('aufstieg')) return '#00D26A';
+    if (lowerName.includes('playoff')) return '#5AC8FA';
+    if (lowerName.includes('eliminated') || lowerName.includes('ausgeschieden')) return '#8E8E93';
+
+    return apiColor || '#8E8E93';
 }
 
 export async function GET(
@@ -93,12 +116,13 @@ export async function GET(
         const tables = standingsData?.results?.tables || [];
         const rows = tables[0]?.rows || [];
 
-        // Build promotion lookup map (promotion_id -> { name, color, zone })
-        const promotionMap = new Map<string, { name: string; color: string; zone: string | null; label: string }>();
+        // Build promotion lookup map using promotion_id as unique zone identifier
+        // Keep individual promotion names without grouping
+        const promotionMap = new Map<string, { name: string; label: string; color: string }>();
         for (const p of promotions) {
-            const zone = categorizePromotion(p.name);
             const label = PROMOTION_LABELS[p.name] || p.name;
-            promotionMap.set(p.id, { name: p.name, color: p.color, zone, label });
+            const color = getZoneColor(p.name, p.color);
+            promotionMap.set(p.id, { name: p.name, label, color });
         }
 
         if (rows.length === 0) {
@@ -130,13 +154,13 @@ export async function GET(
         }
 
         // Build standings with team info and dynamic zone from API
+        // Use promotion_id as unique zone identifier (not grouped)
         const standings = rows.map((row: any, idx: number) => {
             const teamInfo = teamMap.get(row.team_id) || { name: `Team ${idx + 1}`, logo: '' };
             const position = row.position || idx + 1;
 
-            // Get zone from promotion_id (dynamic from API)
+            // Use promotion_id as unique zone identifier
             const promotionInfo = promotionMap.get(row.promotion_id);
-            const zone = promotionInfo?.zone || null;
 
             return {
                 position,
@@ -149,16 +173,18 @@ export async function GET(
                 goals: `${row.goals || 0}:${row.goals_against || 0}`,
                 goalDiff: row.goal_diff || 0,
                 points: row.points || 0,
-                zone,
-                promotionLabel: promotionInfo?.label || null,
-                promotionColor: promotionInfo?.color || null,
+                zone: row.promotion_id || null, // Use promotion_id as unique zone
+                zoneLabel: promotionInfo?.label || null,
+                zoneColor: promotionInfo?.color || null,
             };
         });
 
-        // Build promotions list for frontend legend
-        const uniquePromotions = Array.from(promotionMap.values())
-            .filter(p => p.zone)
-            .map(p => ({ zone: p.zone, label: p.label, color: p.color }));
+        // Build promotions list for frontend legend (only used promotions)
+        const usedPromotionIds = new Set(rows.map((r: any) => r.promotion_id).filter(Boolean));
+        const uniquePromotions = Array.from(usedPromotionIds).map(id => {
+            const info = promotionMap.get(id as string);
+            return { zone: id, label: info?.label || '', color: info?.color || '#8E8E93' };
+        });
 
         return NextResponse.json({
             success: true,
