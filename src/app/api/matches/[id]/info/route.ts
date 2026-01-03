@@ -123,6 +123,7 @@ export async function GET(
             name: string;
             country: string | null;
             birthday: string | null;
+            age: number | null;
             logo: string | null;
         } | null = null;
 
@@ -138,11 +139,33 @@ export async function GET(
                 console.log('[Referee API] Full response:', JSON.stringify(referee, null, 2));
 
                 if (referee && referee.name) {
+                    // Format birthday from Unix timestamp
+                    let birthdayFormatted: string | null = null;
+                    let age: number | null = null;
+
+                    const birthdayTimestamp = referee.birthday || referee.birth_date;
+                    if (birthdayTimestamp && typeof birthdayTimestamp === 'number') {
+                        const birthDate = new Date(birthdayTimestamp * 1000);
+                        birthdayFormatted = birthDate.toLocaleDateString('de-DE', {
+                            day: 'numeric',
+                            month: 'long',
+                            year: 'numeric',
+                        });
+                        // Calculate age
+                        const today = new Date();
+                        age = today.getFullYear() - birthDate.getFullYear();
+                        const monthDiff = today.getMonth() - birthDate.getMonth();
+                        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                            age--;
+                        }
+                    }
+
                     refereeInfo = {
                         id: refereeId,
                         name: referee.name,
                         country: referee.country_name || referee.nationality || referee.country || null,
-                        birthday: referee.birthday || referee.birth_date || null,
+                        birthday: birthdayFormatted,
+                        age: age,
                         logo: referee.logo || referee.photo || null,
                     };
                 }
