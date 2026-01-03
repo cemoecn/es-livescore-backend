@@ -23,6 +23,7 @@ const CURRENT_SEASON_IDS: Record<string, string> = {
     'vl7oqdehlyr510j': '56ypq3nhxw7md7o', // La Liga 2025/26
     '4zp5rzghp5q82w1': '4zp5rzghn83q82w', // Serie A 2025/26
     'yl5ergphnzr8k0o': '9dn1m1gh645moep', // Ligue 1 2025/26
+    '8y39mp1h6jmojxg': '4zp5rzgh8xvq82w', // Süper Lig 2025/26
     'vl7oqdeheyr510j': 'yl5ergphgo0r8k0', // Eredivisie 2025/26
     '9vjxm8ghx2r6odg': 'kjw2r09h811rz84', // Primeira Liga 2025/26
     'z8yomo4h7wq0j6l': 'z8yomo4hn70q0j6', // Champions League 2025/26
@@ -37,6 +38,7 @@ const CURRENT_STAGE_IDS: Record<string, string> = {
     'vl7oqdehlyr510j': 'dn1m1ghgdd5moep', // La Liga
     '4zp5rzghp5q82w1': '4wyrn4h5pzlq86p', // Serie A
     'yl5ergphnzr8k0o': '965mkyh098kr1ge', // Ligue 1
+    '8y39mp1h6jmojxg': 'y39mp1hepd8mojx', // Süper Lig (placeholder - will be updated)
     'vl7oqdeheyr510j': '1l4rjnhdp4km7vx', // Eredivisie
     '9vjxm8ghx2r6odg': '965mkyh09vxr1ge', // Primeira Liga
     'z8yomo4h7wq0j6l': 'dj2ryoh9064q1zp', // Champions League
@@ -51,6 +53,7 @@ const SEASON_INFO: Record<string, { totalMatchdays: number; season: string; team
     'vl7oqdehlyr510j': { totalMatchdays: 38, season: '2025/26', teamCount: 20 }, // La Liga
     '4zp5rzghp5q82w1': { totalMatchdays: 38, season: '2025/26', teamCount: 20 }, // Serie A
     'yl5ergphnzr8k0o': { totalMatchdays: 34, season: '2025/26', teamCount: 18 }, // Ligue 1
+    '8y39mp1h6jmojxg': { totalMatchdays: 38, season: '2025/26', teamCount: 19 }, // Süper Lig
     'vl7oqdeheyr510j': { totalMatchdays: 34, season: '2025/26', teamCount: 18 }, // Eredivisie
     '9vjxm8ghx2r6odg': { totalMatchdays: 34, season: '2025/26', teamCount: 18 }, // Primeira Liga
     'z8yomo4h7wq0j6l': { totalMatchdays: 8, season: '2025/26', teamCount: 36 }, // Champions League
