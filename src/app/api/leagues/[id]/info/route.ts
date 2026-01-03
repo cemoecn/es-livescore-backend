@@ -181,14 +181,16 @@ export async function GET(
             const teamCount = seasonInfo?.teamCount || 18;
             const upperHalfLimit = Math.ceil(teamCount / 2); // Top 50% of table
 
-            // Filter upcoming matches only (status_id 1 = upcoming)
+            // For top match selection: include ALL matches (upcoming + finished) from current round
+            // This ensures the top match stays fixed even after it's played
             const upcomingOnly = upcomingMatches.filter((m: any) => m.status_id === 1);
+            const allMatches = upcomingMatches; // All matches regardless of status
 
             // Find current round - based on EARLIEST upcoming match date per round
             // This handles pre-scheduled games (e.g., Round 19 games played before Round 18)
             const now = Date.now();
 
-            // Find the earliest upcoming match date for each round
+            // Find the earliest upcoming match date for each round (for determining current round)
             const roundFirstMatchDate = new Map<number, number>();
             for (const match of upcomingOnly) {
                 if (match.match_time && match.round?.round_num) {
@@ -215,7 +217,7 @@ export async function GET(
                 }
             }
 
-            // Fallback if no upcoming matches found
+            // Fallback if no upcoming matches found - use the latest round with finished matches
             if (!currentRound) {
                 const finishedRounds = upcomingMatches
                     .filter((m: any) => m.status_id === 8 && m.round?.round_num)
@@ -226,10 +228,11 @@ export async function GET(
             // Store the calculated current round for seasonProgress
             calculatedCurrentRound = currentRound;
 
-            // Filter to only matches from the current round
+            // Filter to ALL matches from the current round (including finished ones!)
+            // This ensures the top match stays the same even after it's finished
             const currentRoundMatches = currentRound
-                ? upcomingOnly.filter((m: any) => m.round?.round_num === currentRound)
-                : upcomingOnly;
+                ? allMatches.filter((m: any) => m.round?.round_num === currentRound)
+                : allMatches;
 
             // Find matches where one team is Top 3 and opponent is in upper half
             let bestMatch: any = null;
@@ -319,6 +322,10 @@ export async function GET(
                     date: matchDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' }),
                     time: matchDate.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
                     round: bestMatch.round?.round_num || currentRound || 1,
+                    // Add status and score for finished/live matches
+                    status: bestMatch.status_id === 8 ? 'finished' : bestMatch.status_id === 1 ? 'upcoming' : 'live',
+                    homeScore: bestMatch.home_score?.[0] ?? null,
+                    awayScore: bestMatch.away_score?.[0] ?? null,
                 };
             }
         }
